@@ -13,7 +13,7 @@
 
 ## PatchLoop status and eligibility limit
 
-The source folder already contained PatchLoop code and a verification record dated October 9, 2026, before this event. The root folder was not a Git repository when inspected. Creating a Git repository during the event would establish its initialization date, but it would not establish that this pre-existing codebase was built during the event. The official FAQ says old codebases are not eligible; only TestMu AI can decide whether an event-window rebuild of this project qualifies. No history will be rewritten to hide provenance.
+The owner stated on 2026-11-17 that PatchLoop was built for this hackathon. The source folder also contained a verification record dated October 9, before the November 12 kickoff. That record conflicts with the owner's statement about when the project was built; the exact chronology needs reconciliation. The folder had no Git repository before this preparation, and the new local repo was initialized on November 17. That proves the Git initialization date, not the first-authored date of every file. The official FAQ says an old codebase is not eligible. Do not rewrite history or claim eligibility based only on the new root commit; ask TestMu if the October record's provenance is uncertain.
 
 PatchLoop implements a human-gated Kane failure → Codex repair → same-objective Kane rerun path in source. Existing Kane evidence is from October 9, not this event. A live PatchLoop Codex repair and subsequent Kane pass have not been observed in the records reviewed. Current local checks are not event-week Kane proof. There is no recorded demo video, pair of public launch posts, public repo, or submission receipt in the project evidence.
 
@@ -28,12 +28,12 @@ PatchLoop implements a human-gated Kane failure → Codex repair → same-object
 
 | Item | Current evidence |
 |---|---|
-| Eligible event-built code and Kane integration | **Unresolved/high risk:** project predates event; request organizer ruling. |
+| Eligible event-built code and Kane integration | **Unresolved:** owner says the project was built for the event; the dated local run conflicts with that chronology. Reconcile the record or ask TestMu. |
 | TestMu signup and Kane run for entrant | Not verified in project files; account state is not inspected or asserted. |
 | App works end to end | Existing local UI/API and bundled app checks are recorded; rerun current checks before handoff. |
 | Meaningful Kane proof | October 9 pre-event evidence only; current event run pending. |
 | Agent↔Kane feedback | Flow exists in source; current live repair/rerun proof pending. |
-| Public GitHub repository initialized during event | Not created; no repo target specified. |
+| Public GitHub repository initialized during event | Local repo initialized Nov 17; `origin` points to the specified repo; push/authentication failed, so public access is unverified. |
 | 3–5 minute YouTube demo | Not recorded or published. |
 | At least two public project posts | Not published or verified. |
 | Submission form/receipt | Not submitted. |

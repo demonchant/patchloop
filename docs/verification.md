@@ -22,7 +22,7 @@ The first block below is historical pre-event evidence retained as recorded. It 
 | `node --test --test-isolation=none --test-concurrency=1` | Passed (7 tests) | Single-process workaround for this sandbox's `EPERM` when Node's default test runner spawns workers. Includes busy-lock and interrupted-run recovery tests. |
 | `npm.cmd test` | Could not run here (`spawn EPERM`) | Node test runner failed while spawning its worker, before executing tests. |
 | `npm.cmd run test:e2e` | Could not run here (`spawn EPERM`) | Playwright failed to spawn before executing browser tests; no current E2E result. |
-| PatchLoop HTTP smoke request | Not verified | Server started, but the PowerShell HTTP client failed during CLR startup. A subsequent Node fetch found no listener. No endpoint result is claimed. |
+| Demo-kit launcher and health request | Partial pass | `demo-kit/start-demo.ps1` created a disposable seeded target and started PatchLoop on a free loopback port; `GET /api/health` returned 200. The preflight endpoint returned 500 because this sandbox blocks child-process launch (`spawn EPERM`); no Kane/Codex readiness is claimed. |
 | PatchLoop Kane→Codex→Kane flow | Not run | Requires authenticated local Kane and Codex CLIs and current event-period evidence. Historical October run is not event proof. |
 
 ## Archive/restore evidence (2026-10-09)

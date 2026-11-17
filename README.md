@@ -2,7 +2,7 @@
 
 **A local workbench for turning a real browser failure into a reviewed agent repair and a same-objective Kane rerun.** PatchLoop keeps the acceptance objective fixed, runs changes in a separate Git worktree, and lets the actual Kane CLI result control the verification state.
 
-> **Provenance:** This implementation was started before the hackathon build window. It is not represented as an event-built submission. The rules supplied for the event say the app and Kane integration must be built during the event; using this pre-event history may affect eligibility.
+> **Provenance:** The owner says PatchLoop was built for this hackathon. The local record also contains an October 9 verification run, before the November 12 kickoff. The exact chronology is unresolved; see [event readiness](docs/event-readiness.md). Do not treat the November Git initialization as proof that all code was first written during the event.
 
 ## How the loop works
 
@@ -114,4 +114,6 @@ Browser UI (loopback)
 
 More detail: [Architecture and threat boundaries](docs/architecture.md), [claim-to-proof ledger](docs/claim-ledger.md), and [verification record](docs/verification.md).
 
-The current event requirements and provenance limits are recorded in [Kane hackathon readiness](docs/event-readiness.md). This project predates the event; ask the organizers before treating it as eligible. The existing source does not establish an event-week Kane→Codex→Kane run, two public launch posts, a demo video, or a submission receipt.
+The current event requirements, the owner's provenance statement, and the conflicting dated record are tracked in [Kane hackathon readiness](docs/event-readiness.md). The existing source does not establish a current event-week Kane→Codex→Kane run, two public launch posts, a demo video, or a submission receipt.
+
+For a complete recording kit, use [the demo runbook](demo-kit/START-HERE.md). It prepares a disposable target with one disclosed regression so the real Kane → Codex → Kane loop can be demonstrated without adding a feature to PatchLoop.
