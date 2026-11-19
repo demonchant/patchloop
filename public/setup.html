@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#e7efed">
+    <title>Setup — PatchLoop</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="PatchLoop home"><svg class="brand-mark" viewBox="0 0 40 40" role="img" aria-label=""><path d="M8 9h22v6H15v8h12v6H15v7H8z"/><path d="M30 8l4 4-4 4" class="brand-mark-signal"/></svg><span>PatchLoop</span></a>
+        <div class="topbar-right"><a class="top-link" href="/">Return to the workbench</a></div>
+      </header>
+      <main class="setup-main">
+        <section class="setup-intro">
+          <p class="overline"><span class="overline-rule"></span> GET YOUR RUNNER READY</p>
+          <h1>One site.<br>Your own <span>runner.</span></h1>
+          <p>PatchLoop keeps the session and run record online. Kane, Codex, browser sessions, source code, and worktrees stay on the computer you pair.</p>
+        </section>
+        <section class="setup-grid" aria-label="Setup steps">
+          <article class="setup-step">
+            <div class="setup-step-head"><span>01</span><h2>Install your tools</h2></div>
+            <p>Use Node.js 20 or newer, Git, and Chrome on the computer that will run the checks.</p>
+            <pre>npm install -g @testmuai/kane-cli @openai/codex
+kane-cli login --oauth
+codex login</pre>
+            <p>Confirm your Kane account has credits and Codex is signed in before starting a demo.</p>
+          </article>
+          <article class="setup-step">
+            <div class="setup-step-head"><span>02</span><h2>Prepare the target app</h2></div>
+            <p>The target and PatchLoop are separate Git checkouts. Clone the supplied showcase target on the runner computer, then commit its reviewed baseline.</p>
+            <pre>git clone https://github.com/demonchant/patchloop-full-showcase2.git
+cd patchloop-full-showcase2
+npm start</pre>
+            <p>The manifest's local start command executes with your user permissions. Read it before registering this repository.</p>
+          </article>
+          <article class="setup-step">
+            <div class="setup-step-head"><span>03</span><h2>Pair and choose</h2></div>
+            <p>Set the target path in the runner terminal before starting or pairing.</p>
+            <pre>$target = Join-Path $HOME 'patchloop-full-showcase2'
+$env:PATCHLOOP_TARGET_REPO = (Resolve-Path $target).Path
+npm run worker -- --url https://YOUR-PATCHLOOP-URL --pair-code YOUR-ONE-TIME-CODE</pre>
+            <p>Use the exact command shown after generating a one-time code in the signed-in PatchLoop page. Keep it private; omit the code on later restarts.</p>
+          </article>
+        </section>
+        <section class="setup-callout">
+          <div><p class="panel-kicker">BEFORE A RUN</p><h2>Check the target baseline.</h2></div>
+          <p>PatchLoop uses the target's committed HEAD and creates an isolated worktree. Uncommitted target files are not copied. Review `patchloop.target.json` before registering a repo: its install and start commands run locally with your operating-system permissions.</p>
+        </section>
+        <section class="setup-local">
+          <p class="panel-kicker">LOCAL-ONLY OPTION</p>
+          <h2>Run the app and tools on one computer.</h2>
+          <pre>npm ci
+$env:PATCHLOOP_TARGET_REPO = (Resolve-Path 'C:\path\to\trusted-target').Path
+npm start</pre>
+          <p>Open <code>http://127.0.0.1:4173</code>. In local mode, run history and worktrees stay under `.patchloop/`. The target needs a committed Git baseline before PatchLoop can select it.</p>
+        </section>
+      </main>
+      <footer><span>PATCHLOOP <b>•</b> LOCAL EXECUTION / PRIVATE RECORDS</span><span>Only an observed Kane result can verify a repair.</span></footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+node_modules/
+.patchloop/
+.env
+.env.*
+!.env.example
+artifacts/
+test-results/
+playwright-report/
+coverage/
+*.log
+/HANDOFF.md
+/examples/patchloop-full-showcase2/
+/private-docs/

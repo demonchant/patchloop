@@ -1,0 +1,20 @@
+{
+  "name": "patchloop-event",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A browser-evidence repair loop for local coding agents.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "worker": "node worker.mjs",
+    "test:e2e": "playwright test",
+    "check": "node --check server.mjs && node --check worker.mjs && node --check lib/store.mjs && node --check lib/process.mjs && node --check lib/engine.mjs && node --check public/app.js && node --check playwright.config.mjs && node --check e2e/workbench.spec.mjs",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}
