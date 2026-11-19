@@ -7,7 +7,7 @@ This kit gives you the setup, live run, recording outline, narration, and submis
 1. Sign in to TestMu AI and claim the event credits. Sign in locally with `kane-cli login --oauth` and keep credentials out of chat and the repo.
 2. Confirm Codex CLI is signed in with `codex login` if needed.
 3. Run `demo-kit/start-demo.ps1` from the project root. It creates a fresh local demo target and starts PatchLoop in the foreground. Keep the terminal visible and open the loopback URL printed by the script.
-4. In preflight, confirm Kane is authenticated, Codex is installed, and the configured demo target is ready. Do not record until each check is green.
+4. In the Target repository picker, select the configured disposable demo target (its name begins with `patchloop-demo-target-`). In preflight, confirm Kane is authenticated, Codex is installed, and the configured target is ready. Do not record until each check is green.
 5. Review the [recording plan](recording-plan.md), [voiceover](voiceover.md), and [submission checklist](submission-checklist.md).
 
 The launcher and local health route were exercised here. This runtime blocks PatchLoop's child-process preflight (`spawn EPERM`), so it could not verify Kane or Codex; rerun preflight on the machine you will record from.
