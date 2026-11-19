@@ -36,5 +36,6 @@ $env:PATCHLOOP_PORT = [string]$port
 Write-Host "Disposable regression target: $target"
 Write-Host 'Expected bug: restore makes a completed task active but incomplete.'
 Write-Host "Open http://127.0.0.1:$port and confirm local preflight before recording."
+Write-Host "For an email-protected read-only URL, use a second terminal: demo-kit/start-quick-tunnel.ps1 -PatchLoopPort $port -AllowedEmail your@email.com"
 Write-Host 'Press Ctrl+C in this terminal after the recording.'
 node (Join-Path $projectRoot 'server.mjs')

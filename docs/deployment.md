@@ -31,6 +31,14 @@ The authenticated CLI profiles are intentionally not copied or mounted into Dock
 
 No public server is required for the event brief, which accepts a runnable local command. Do not expose the process-execution API to a public network. A public multi-user deployment would require authentication, per-user workspace isolation, job authorization, and secret-management changes that this local-first app does not implement.
 
+The GitHub repository contains the PatchLoop project. `PATCHLOOP_TARGET_REPO` must be a local Git checkout on the machine running PatchLoop; it is not a GitHub URL. The demo-kit script creates this local target automatically. PatchLoop does not upload the target or its repair worktree.
+
+### Temporary read-only URL for judges
+
+Cloudflare [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) provide temporary `trycloudflare.com` URLs without a domain or Cloudflare account. The `--allowed-mail` option requires an emailed one-time PIN for explicitly allowed email addresses. `demo-kit/start-quick-tunnel.ps1` points the tunnel at a loopback-only viewer proxy, not the PatchLoop executor. The proxy allows only required GET routes; it returns a static preflight view and denies POST, repair, verify, and arbitrary paths. Use the unique temporary demo state so shared history contains only the intended demo.
+
+The URL changes each time and has no uptime guarantee. Keep the PatchLoop terminal and tunnel terminal open while the URL is in use. PatchLoop polls run history and does not use SSE, so Quick Tunnel's SSE limitation does not affect this interface. The owner operates PatchLoop through the local URL; tunnel visitors are read-only. Send the temporary URL only to the allowed viewers.
+
 ## Required local prerequisites
 
 - Node.js 20 or newer and Git.

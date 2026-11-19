@@ -25,6 +25,15 @@ The first block below is historical pre-event evidence retained as recorded. It 
 | Demo-kit launcher and health request | Partial pass | `demo-kit/start-demo.ps1` created a disposable seeded target and started PatchLoop on a free loopback port; `GET /api/health` returned 200. The preflight endpoint returned 500 because this sandbox blocks child-process launch (`spawn EPERM`); no Kane/Codex readiness is claimed. |
 | PatchLoop Kane→Codex→Kane flow | Not run | Requires authenticated local Kane and Codex CLIs and current event-period evidence. Historical October run is not event proof. |
 
+## Target picker and read-only viewer checks (2026-11-19)
+
+| Command | Result | Scope / limitation |
+|---|---|---|
+| `npm.cmd run check` | Passed | Syntax checked server, target engine, browser UI, viewer proxy, and tests. |
+| `npm.cmd test` | Passed (10 tests) | Includes target ID persistence and read-only viewer route allowlist tests. |
+| `docker compose --profile test run --build --rm -e TEST_OUTPUT_DIR=/tmp/patchloop-results -e TEST_HTML_REPORT=/tmp/patchloop-report e2e` | Not run | Docker Desktop's Linux engine was not running (`dockerDesktopLinuxEngine` pipe unavailable). No current Playwright result. |
+| Showcase target run | Not run | Showcase baseline is prepared with a disclosed restore regression. It has not yet been run through authenticated Kane and Codex CLIs. |
+
 ## Archive/restore evidence (2026-10-09)
 
 The immutable acceptance objective hash was `fedc6133ab58b946870581fd309da2e07df369f99dcac9ab26abe1e57c734916` for all three runs below.

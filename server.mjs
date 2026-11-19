@@ -51,6 +51,7 @@ async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host ?? '127.0.0.1'}`);
   if (req.method === 'GET' && url.pathname === '/api/health') return send(res, 200, { ok: true, name: 'PatchLoop', version: '1.0.0', mode: process.env.PATCHLOOP_TARGET_REPO ? 'configured' : 'bundled-demo' });
   if (req.method === 'GET' && url.pathname === '/api/preflight') return send(res, 200, await engine.preflight());
+  if (req.method === 'GET' && url.pathname === '/api/targets') return send(res, 200, { targets: await engine.listTargets() });
   if (req.method === 'GET' && url.pathname === '/api/runs') return send(res, 200, { runs: await store.list() });
 
   if (req.method === 'POST' && url.pathname === '/api/runs') {
@@ -61,7 +62,11 @@ async function route(req, res) {
     if (objective.length < 16 || objective.length > 1800) return send(res, 400, { error: 'Acceptance objective must be 16–1800 characters.' });
     if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(task + objective)) return send(res, 400, { error: 'Control characters are not allowed.' });
     if (engine.busy) return send(res, 409, { error: 'Another Kane or agent process is running.' });
-    const run = await store.create({ task, objective, objectiveHash: hashText(objective) });
+    const targetId = typeof input.targetId === 'string' ? input.targetId : (process.env.PATCHLOOP_TARGET_REPO ? 'configured' : 'bundled-demo');
+    const targets = await engine.listTargets();
+    const selectedTarget = targets.find((target) => target.id === targetId);
+    if (!selectedTarget || !selectedTarget.ready) return send(res, 400, { error: 'Selected target is unavailable. Refresh the repository list and choose a ready target.' });
+    const run = await store.create({ task, objective, objectiveHash: hashText(objective), targetId });
     void engine.startVerification(run.id).catch((error) => store.update(run.id, (item) => { item.state = 'setup_error'; item.events.push({ at: new Date().toISOString(), type: 'setup_error', message: redact(error.message) }); }));
     return send(res, 202, { run });
   }

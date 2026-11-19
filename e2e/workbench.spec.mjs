@@ -11,6 +11,7 @@ test('loads the workbench and reports real local tool readiness', async ({ page 
   expect(response.status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Code changed. Did it work?' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Describe the change' })).toBeVisible();
+  await expect(page.getByLabel('Target repository')).toHaveValue('bundled-demo');
   await expect(page.getByRole('heading', { name: 'Local preflight' })).toBeVisible();
   await expect(page.getByText('No runs yet')).toBeVisible();
   await expect(page.locator('.preflight-row')).toHaveCount(4, { timeout: 30_000 });
@@ -45,6 +46,9 @@ test('exposes health and refuses incomplete task submissions without starting to
   const health = await request.get('/api/health');
   expect(health.ok()).toBeTruthy();
   expect(await health.json()).toMatchObject({ ok: true, name: 'PatchLoop' });
+  const targets = await request.get('/api/targets');
+  expect(targets.ok()).toBeTruthy();
+  expect((await targets.json()).targets).toContainEqual(expect.objectContaining({ id: 'bundled-demo', ready: true }));
   const invalid = await request.post('/api/runs', { data: { task: 'short', objective: 'too short' } });
   expect(invalid.status()).toBe(400);
   expect(await invalid.json()).toHaveProperty('error');

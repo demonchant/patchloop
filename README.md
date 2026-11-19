@@ -70,7 +70,7 @@ The Docker UI checks exercise the real PatchLoop app and API. They do not invoke
 
 ## Use a different target repo
 
-The default is the bundled demo. To use another local Git repository, start PatchLoop with `PATCHLOOP_TARGET_REPO` pointing to its repository root. It must have a commit, a Node `server.mjs` entry point, and `/api/health`; PatchLoop starts that file in the worktree on a fresh port. The app must honor `PATCHLOOP_PORT` and `PATCHLOOP_DATA_DIR` for each isolated run. Uncommitted files are not copied into the worktree: commit or stash the intended baseline first.
+The default is the bundled demo. The form's **Load the bundled demo task** button only fills the change request and acceptance objective; it does not choose or load a repository. To use another app, start PatchLoop with `PATCHLOOP_TARGET_REPO` pointing to a local clone's repository root. The repo must have a commit, a Node `server.mjs` entry point, and `/api/health`; PatchLoop starts that app in an isolated worktree on a fresh port. The app must honor `PATCHLOOP_PORT` and `PATCHLOOP_DATA_DIR` for each isolated run. Uncommitted files are not copied into the worktree: commit or stash the intended baseline first. The demo-kit launcher sets this variable to a disposable local fixture for you; it does not use a GitHub URL.
 
 ```powershell
 $env:PATCHLOOP_TARGET_REPO = 'C:\path\to\your\app'
@@ -117,3 +117,9 @@ More detail: [Architecture and threat boundaries](docs/architecture.md), [claim-
 The current event requirements, the owner's provenance statement, and the conflicting dated record are tracked in [Kane hackathon readiness](docs/event-readiness.md). The existing source does not establish a current event-week Kane→Codex→Kane run, two public launch posts, a demo video, or a submission receipt.
 
 For a complete recording kit, use [the demo runbook](demo-kit/START-HERE.md). It prepares a disposable target with one disclosed regression so the real Kane → Codex → Kane loop can be demonstrated without adding a feature to PatchLoop.
+
+### Public showcase target
+
+The separate [PatchLoop Full Showcase app](examples/patchloop-full-showcase/README.md) is a small target repository with one intentionally seeded restore regression. Clone it locally, set `PATCHLOOP_TARGET_REPO` before starting PatchLoop, choose it in the repository selector, then record the same objective failing, receiving a human-approved Codex repair, and passing on Kane's replay. The showcase README documents the exact setup and acceptance case. A seeded defect is not evidence of a repair; report a successful loop only after capturing an actual run.
+
+For a temporary read-only URL, follow the [Quick Tunnel instructions](demo-kit/START-HERE.md#temporary-live-url-optional). The PatchLoop executor remains local.

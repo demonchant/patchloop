@@ -2,10 +2,12 @@ const $ = (selector) => document.querySelector(selector);
 const form = $('#run-form');
 const taskInput = $('#task');
 const objectiveInput = $('#objective');
+const targetSelect = $('#target-id');
 const runsElement = $('#runs');
 const notice = $('#notice');
 const detailDialog = $('#detail-dialog');
 let lastRuns = [];
+let readOnlyViewer = false;
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const humanState = (state) => ({ needs_review: 'Review failure', setup_error: 'Setup error', agent_error: 'Agent error', inconclusive: 'Inconclusive', unresolved: 'Still failing', verifying: 'Kane running', repairing: 'Agent working', queued: 'Queued', verified: 'Verified' })[state] ?? state;
@@ -28,6 +30,19 @@ function showNotice(message, error = false) {
 }
 
 function renderPreflight(result) {
+  if (result.remoteViewer) {
+    readOnlyViewer = true;
+    const rows = [['Access', 'Email PIN required'], ['Runner', 'Owner-operated locally'], ['Target', 'Read-only demo'], ['Actions', 'Disabled for visitors']];
+    $('#preflight').innerHTML = rows.map(([label, value]) => `<div class="preflight-row"><span class="preflight-name">${escapeHtml(label)}</span><span class="preflight-value ok">${escapeHtml(value)}</span></div>`).join('');
+    for (const field of form.elements) field.disabled = true;
+    $('#load-example').disabled = true;
+    showNotice('Read-only view. Use the owner’s local PatchLoop window to run or repair.', false);
+    void loadRuns();
+    return;
+  }
+  readOnlyViewer = false;
+  for (const field of form.elements) field.disabled = false;
+  $('#load-example').disabled = false;
   const rows = [
     ['Kane CLI', result.kane.installed ? result.kane.version : 'Not found'],
     ['Kane sign-in', result.kane.authenticated ? 'Authenticated' : 'Sign-in needed'],
@@ -46,6 +61,18 @@ async function loadPreflight() {
   catch { $('#preflight').innerHTML = '<div class="preflight-row"><span class="preflight-name">Local checks</span><span class="preflight-value bad">Unavailable</span></div>'; }
 }
 
+async function loadTargets() {
+  try {
+    const { targets } = await api('/api/targets');
+    const previous = targetSelect.value;
+    targetSelect.innerHTML = targets.map((target) => `<option value="${escapeHtml(target.id)}" ${target.ready ? '' : 'disabled'}>${escapeHtml(target.name)}${target.ready ? '' : ' (not ready)'}</option>`).join('');
+    if (targets.some((target) => target.id === previous && target.ready)) targetSelect.value = previous;
+    targetSelect.disabled = !targets.some((target) => target.ready);
+  } catch {
+    targetSelect.innerHTML = '<option value="bundled-demo">Bundled Goodwork demo</option>';
+  }
+}
+
 function eventLabel(event) {
   return ({ created: 'Task submitted', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Codex repair started', repair_finished: 'Codex repair completed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
 }
@@ -57,7 +84,7 @@ function renderRun(run) {
   const repeatedFailure = lastTwo.length === 2 && lastTwo.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
   const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
   const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state);
-  const action = `${canReplay ? `<button class="small-button" data-action="verify" data-id="${run.id}">${run.repairCount ? 'Run same Kane check ↻' : (repeatedFailure ? 'Replay again ↻' : 'Replay before repair ↻')}</button>` : ''}${canRepair ? `<button class="small-button danger" data-action="repair" data-id="${run.id}">Send repeated failure to Codex ↗</button>` : ''}`;
+  const action = readOnlyViewer ? '' : `${canReplay ? `<button class="small-button" data-action="verify" data-id="${run.id}">${run.repairCount ? 'Run same Kane check ↻' : (repeatedFailure ? 'Replay again ↻' : 'Replay before repair ↻')}</button>` : ''}${canRepair ? `<button class="small-button danger" data-action="repair" data-id="${run.id}">Send repeated failure to Codex ↗</button>` : ''}`;
   const runDetails = `${run.attempts.length} recorded step${run.attempts.length === 1 ? '' : 's'}`;
   const latestText = latest ? `${latest.verdict}${latest.resultCode !== null ? ` · code ${latest.resultCode}` : ''}` : 'Waiting for Kane';
   return `<article class="run-card" data-run-card="${run.id}">
@@ -103,7 +130,7 @@ form.addEventListener('submit', async (event) => {
   button.disabled = true;
   notice.hidden = true;
   try {
-    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value }) });
+    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value, targetId: targetSelect.value }) });
     showNotice(`Task ${run.id.slice(0, 8)} created. Kane is starting a real browser run.`);
     taskInput.value = '';
     objectiveInput.value = '';
@@ -146,5 +173,6 @@ $('#close-dialog').addEventListener('click', () => detailDialog.close());
 detailDialog.addEventListener('click', (event) => { if (event.target === detailDialog) detailDialog.close(); });
 counts();
 void loadPreflight();
+void loadTargets();
 void loadRuns();
 setInterval(() => { void loadRuns(); }, 1800);
