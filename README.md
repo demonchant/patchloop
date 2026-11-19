@@ -120,6 +120,6 @@ For a complete recording kit, use [the demo runbook](demo-kit/START-HERE.md). It
 
 ### Public showcase target
 
-The separate [PatchLoop Full Showcase app](examples/patchloop-full-showcase/README.md) is a small target repository with one intentionally seeded restore regression. Clone it locally, set `PATCHLOOP_TARGET_REPO` before starting PatchLoop, choose it in the repository selector, then record the same objective failing, receiving a human-approved Codex repair, and passing on Kane's replay. The showcase README documents the exact setup and acceptance case. A seeded defect is not evidence of a repair; report a successful loop only after capturing an actual run.
+The separate [PatchLoop Full Showcase app](https://github.com/demonchant/patchloop-full-showcase) is a small target repository with one intentionally seeded restore regression. Clone it locally, set `PATCHLOOP_TARGET_REPO` before starting PatchLoop, choose it in the repository selector, then record the same objective failing, receiving a human-approved Codex repair, and passing on Kane's replay. The showcase README documents the exact setup and acceptance case. A seeded defect is not evidence of a repair; report a successful loop only after capturing an actual run.
 
 For a temporary read-only URL, follow the [Quick Tunnel instructions](demo-kit/START-HERE.md#temporary-live-url-optional). The PatchLoop executor remains local.

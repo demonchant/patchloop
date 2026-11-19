@@ -19,6 +19,7 @@
 /artifacts/
 /test-results/
 /playwright-report/
+/examples/patchloop-full-showcase/
 
 # Dependencies and OS/editor noise.
 /node_modules/
