@@ -1,50 +1,136 @@
 # PatchLoop
 
-**A local workbench for turning a repeatable browser failure into a reviewed agent repair and a same-objective Kane rerun.** PatchLoop stores the task and run record locally. Kane, Codex, the target app, and the repair worktree run on the computer paired to the workbench.
+**An AI coding agent says, “It’s fixed.” PatchLoop asks the browser.**
 
-## What works
+PatchLoop is a developer workbench for turning a real browser failure into a reviewable repair and a second run of the exact same acceptance check. Kane CLI observes what happened in the browser. Codex can work on the failure in an isolated Git worktree. PatchLoop keeps the requested behavior fixed and lets Kane’s recorded result—not an agent’s confidence—decide whether the flow passed.
 
-1. Save a change request and a fixed browser objective. PatchLoop stores the objective's SHA-256 hash.
-2. Run Kane against a committed target repository in an isolated Git worktree and a fresh app data directory.
-3. Replay the same objective. PatchLoop requires two matching Kane failures before it offers the Codex repair action.
-4. Approve Codex manually. Codex edits the isolated worktree; PatchLoop keeps the diff for review.
-5. Run Kane again against that same worktree and unchanged objective. Only exit code `0` plus a successful final `run_end` event can set the run to `verified`.
+## The moment PatchLoop is for
 
-An inconclusive run, missing event, timeout, output overflow, or setup error cannot become a pass. PatchLoop does not commit, merge, publish, deploy, or submit the repair. The sample app deliberately contains a disclosed restore regression; it is a test fixture, not proof that a real Kane/Codex loop has run.
+You ask a coding agent to repair a checkout, restore a task, or finish a settings flow. The diff looks reasonable. The agent says it is done. Then someone opens the app and discovers that the completed task comes back unchecked, the cart is empty after refresh, or a button only works along the path the agent happened to try.
 
-## Run locally
+That gap is expensive because the person reviewing the change must reconstruct the requirement, repeat the journey, and decide whether a red result is a product bug or a flaky check. The code-writing agent is also a poor judge of its own work: it can change the implementation and quietly change what “passing” means.
 
-Requirements: Node.js 20+, Git, Chrome, the Kane CLI, and the Codex CLI. Authenticate Kane and Codex using their own local login flows. PatchLoop does not accept their credentials in the browser or `.env`.
+PatchLoop makes that handoff visible. It saves the browser outcome before repair, preserves the acceptance objective, asks for human approval before sending a repeatable failure to Codex, and runs Kane again against the unchanged objective. The reviewer can follow the request, failure, repair diff, and final browser verdict in one history.
+
+## How the repair loop works
+
+```text
+Describe the change and its user-visible acceptance objective
+                         ↓
+PatchLoop hashes the objective and creates an isolated Git worktree
+                         ↓
+Kane drives the target app in a real browser and records its result
+                         ↓
+If the same objective fails twice, a person reviews the evidence
+                         ↓
+With approval, Codex receives the request and real failure output
+                         ↓
+The person reviews the worktree diff
+                         ↓
+Kane reruns the same saved objective against the repair
+                         ↓
+PatchLoop marks “verified” only from Kane’s passing final event and exit code 0
+```
+
+The first failure is not enough to trigger a repair. PatchLoop requires two consecutive failures for the same objective before offering Codex. An inconclusive run, timeout, missing event, setup error, or failed process stays non-green. Repairs are human-triggered, isolated, and limited to two attempts per task. PatchLoop never commits, merges, pushes, deploys, or submits the agent’s change.
+
+## What makes the result reviewable
+
+- **The acceptance objective is fixed.** PatchLoop stores its SHA-256 hash with each Kane attempt. Codex may edit the worktree, but the PatchLoop workflow does not let it replace the saved check.
+- **A failure is preserved before repair.** The recorded Kane event, process exit code, objective hash, and bounded output remain part of the task history.
+- **Uncertainty stays visible.** A timeout or malformed/missing final event is inconclusive; it is never presented as a pass.
+- **The code change is inspectable.** Codex works in a detached Git worktree, and PatchLoop retains a downloadable diff for human review.
+- **Verification is independent of the repair agent.** Only Kane’s successful final browser result and process exit code `0` can produce the `verified` state.
+- **The local runner owns execution.** The hosted UI queues work; Kane, Codex, Chrome, the target checkout, and worktrees remain on the paired computer.
+
+## Two ways to use PatchLoop
+
+### Local workbench
+
+Run PatchLoop on your computer at `http://127.0.0.1:4173`. It invokes the locally installed Kane and Codex CLIs directly. Run history, target copies, and worktrees stay in the ignored `.patchloop/` directory.
+
+### Hosted workbench with a private local runner
+
+The hosted service provides Google sign-in, account-scoped run history, and a queue. A runner that you pair from your own computer polls that queue and executes Kane and Codex locally. Your CLI profiles and target repository are not uploaded. Task text, progress, redacted run evidence, and the reviewable diff are sent to the hosted account so the site can display the run.
+
+Hosted mode requires the runner computer to remain online while a task is processed. The Render service uses a persistent disk and a single instance for its local JSON state and in-memory coordination. See [hosted deployment](docs/deployment.md#hosted-link-with-a-local-runner) before enabling it.
+
+**Hosted preview:** [patchloop-web.onrender.com](https://patchloop-web.onrender.com). Availability and end-to-end runner operation must be checked before relying on this URL; a web page loading does not prove the runner is connected.
+
+## Try it locally
+
+Requirements: Node.js 20+, Git, Chrome, Kane CLI, and Codex CLI. Kane and Codex must each be installed and signed in on the computer that will run the task.
 
 ```powershell
 npm ci
 npm run check
 npm test
-$env:PATCHLOOP_TARGET_REPO = (Resolve-Path .\examples\patchloop-full-showcase2).Path
-npm run test:e2e
 npm start
 ```
 
-Playwright uses the pinned `@playwright/test` package. If its matching browser is not installed, run `npx playwright install chromium` once.
+Open `http://127.0.0.1:4173`. The first preflight creates a private copy of the bundled demo task app. It starts empty; PatchLoop does not seed a fake successful run.
 
-Set `PATCHLOOP_TARGET_REPO` to a committed, trusted target checkout before starting. The separate showcase target is published at [demonchant/patchloop-full-showcase2](https://github.com/demonchant/patchloop-full-showcase2). In a published PatchLoop checkout, clone that target separately and set the variable to its path. See [setup and operations](docs/operations.md) for first-run steps and the optional remote runner mode.
+Install and sign in to the command-line tools:
 
-## Security and trust boundaries
+```powershell
+npm install -g @testmuai/kane-cli
+kane-cli login --oauth
+npm install -g @openai/codex
+codex login
+```
 
-- Local mode binds to loopback and stores state under `.patchloop/`.
-- Hosted mode (optional) stores account-scoped run records on one service instance; the local worker keeps provider sign-ins, target paths, source, and worktrees on its machine.
-- A target repository is executable code. Its reviewed `patchloop.target.json` install/start commands run with the local operating-system account.
-- Codex receives repeated failure evidence and works in a detached Git worktree. Review its diff before applying it.
-- Kane output is accepted only when its final one-shot `run_end` event reports `status: passed` and the process exits `0`.
-- Runner reports are checked against the saved objective and successful final Kane event. This is an integrity check between the paired worker and service, not cryptographic proof against a compromised worker.
+Kane runs consume the user’s TestMu AI account credits. Confirm the target repository and available credits before starting a live run.
 
-## Documentation
+## Run the showcase scenario
+
+The bundled showcase target demonstrates a deliberately seeded restore regression. A completed task can lose its completed state after it is archived and restored. The defect is a disclosed fixture, not proof that PatchLoop repaired it.
+
+For the strongest demonstration, show an actual run from a clean start:
+
+1. Select the showcase target and enter the archive/restore request and browser objective.
+2. Run Kane and show the observed failure. Replay the unchanged objective and show that its hash matches.
+3. Review the repeated failure and explicitly authorize Codex.
+4. Inspect the actual worktree diff before rerunning.
+5. Run Kane against the same saved objective. Show the actual final event and exit status. If the rerun fails or is inconclusive, show that result as-is.
+
+The step-by-step [demo and operations guide](docs/demo-and-operations.md) explains target setup, hosted runner pairing, and recording. The [target repository guide](docs/target-repositories.md) explains what code PatchLoop executes locally.
+
+## Evidence and current limits
+
+The repository’s [verification record](docs/verification.md) distinguishes automated checks, Kane runs, and the limitations of each. It records local unit and Playwright results, plus an October 9, 2026 Kane archive/restore run that passed with result code `100` (`success.complete`) and exit code `0`. That historical run predates the November hackathon window. It is not evidence of a current event-period PatchLoop → Codex repair → Kane rerun.
+
+The current evidence does **not** establish a credentialed event-period repair loop, hosted end-to-end worker run, broad user validation, or hackathon submission receipt. The archive/restore fixture is intentionally defective, and its seed must be disclosed in any demo. Do not describe a prepared walkthrough, a local UI test, or a passing historical Kane run as a current live repair.
+
+The project’s provenance also needs care: the repository records work and Kane evidence from before the November 12, 2026 event kickoff. The event rules say the submission code must be started during the event. Confirm eligibility with the organizer; a new repository initialization does not change the age of existing code. See [submission notes](docs/submission.md).
+
+## Security and privacy
+
+- Local mode binds to loopback by default. Do not expose the local execution server directly to the public internet.
+- Hosted sign-in uses Google OAuth and signed, secure session cookies. Hosted run records are scoped to the signed-in Google account.
+- Hosted mode only queues work for paired local runners; it cannot execute local commands on the Render web service.
+- Runner pairing uses a one-time, expiring code and a revocable token. Keep `.patchloop/remote-worker/` private.
+- Target repositories and their manifest commands are executable code. Pair only a repository you trust and inspect its target manifest first.
+- Never commit `.env`, OAuth secrets, runner tokens, CLI profiles, or local run state. The hosted service receives task details, progress, redacted CLI evidence, and repair diffs; avoid placing secrets in task text or code.
+- The hosted JSON store and runner coordination are designed for one service instance. Do not scale horizontally without replacing those storage and coordination mechanisms.
+
+## Technology
+
+PatchLoop uses Node.js for the local/hosted HTTP service, a JSON-backed task store, Git worktrees for isolated repair attempts, Kane CLI for real-browser verification, Codex CLI for human-approved repair proposals, and Playwright for browser tests of the app UI. Google OAuth is used only for hosted PatchLoop identity; it does not sign into Kane or Codex.
+
+There is no embedded product AI. Codex performs the bounded code repair; deterministic PatchLoop logic validates run state and decides whether Kane’s evidence qualifies as a pass.
+
+## KaneCLI Online Hackathon
+
+The current event brief asks for a working end-to-end project, meaningful Kane verification, and feedback between Kane and the coding agent. Its four equally weighted criteria are **Ships**, **Verified**, **Closed loop**, and **Craft**. PatchLoop is designed to make the closed loop and its proof trail inspectable; whether a particular submission satisfies the event’s eligibility and evidence requirements depends on the actual code history and recorded run.
+
+The official page lists a November 26, 2026, 11:59 PM IST deadline and requires a public GitHub repository, a 3–5 minute YouTube demo, project/agent/Kane details, and at least two public project posts. Check the [official event rules](https://www.kaneclihack.sh/) for the current requirements. A repository push is not a submission receipt.
+
+## Project documentation
 
 - [Architecture and trust boundaries](docs/architecture.md)
-- [Setup and operations](docs/operations.md)
-
-## Current evidence limits
-
-Local automated tests cover the worktree replay/repair lifecycle with test-only fake CLI processes, persistence/report invariants, parsing, and the intentionally seeded sample regression. These fixtures do not count as Kane verification or closed-loop event evidence. A credentialed Kane → human-approved Codex → Kane run, hosted deployment, YouTube recording, two public launch posts, and submission receipt have not been observed in this workspace. The main project is published at [demonchant/patchloop](https://github.com/demonchant/patchloop), and the separate sample target is published at [demonchant/patchloop-full-showcase2](https://github.com/demonchant/patchloop-full-showcase2).
-
-A repository push alone is not an event submission.
+- [Claim-to-proof ledger](docs/claim-ledger.md)
+- [Local and hosted deployment](docs/deployment.md)
+- [Target repository contract](docs/target-repositories.md)
+- [Demo and operations guide](docs/demo-and-operations.md)
+- [Verification record](docs/verification.md)
+- [Submission notes](docs/submission.md)

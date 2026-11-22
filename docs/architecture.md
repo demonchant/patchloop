@@ -1,47 +1,29 @@
 # Architecture and trust boundaries
 
-## Local execution flow
+## Request path
 
-```text
-Browser
-  → local PatchLoop HTTP API + atomic JSON store
-  → committed target baseline
-  → retained detached Git worktree for this task
-  → target app with fresh run data on an ephemeral loopback port
-  → real `kane-cli run ... --agent --headless`
-  → persisted failure, final event, exit code, fixed objective hash
-  → human-approved Codex CLI repair in the same worktree
-  → same objective and new isolated target data
-  → successful final Kane event + exit 0 → verified
-```
+The browser posts a change request and acceptance objective to the loopback Node server. The server validates length and control characters, hashes the exact objective, and writes a local record. It does not accept a target URL, shell command, CLI flags, output path, or environment overrides from the browser.
 
-The browser can supply a task, objective, and target ID. It cannot submit a path, command, CLI flag, arbitrary URL, environment override, or output path. The target is selected from runner configuration; a committed `patchloop.target.json` can define install/start commands. Treat those commands as code and inspect the target before registering it.
+The engine resolves a target repository from server environment. Its baseline `HEAD` is materialized as a Git worktree beneath `.patchloop/worktrees/<run-id>`. The selected Node entry point runs from that worktree with a fresh data directory and ephemeral port. The engine waits for the target's `/api/health`, then invokes the installed Kane CLI with the fixed objective and local URL.
 
-## State and invariants
+In hosted mode, Google login scopes run records to the Google subject. The Render web service only queues tasks; it never starts target apps, Kane, or Codex. A user pairs a local runner with a one-time ten-minute code. The runner stores its bearer token locally and Render stores only its SHA-256 hash. The runner polls only that user's queue, imports immutable task/objective fields into a local state directory, executes the existing Engine on that computer, and sends bounded progress, redacted CLI evidence, and the reviewable diff back to the private run record. A runner disconnect marks an in-flight task as needing review rather than reporting a pass.
 
-- The exact acceptance objective is hashed with SHA-256 when the task is created.
-- The first Codex call requires two consecutive failed Kane attempts with that same saved hash.
-- Human action gates Codex. The agent receives the requested change, original objective/hash, and redacted failure output.
-- Kane attempts use the task's retained worktree and fresh target data. Reverification never resets the worktree to baseline.
-- A successful verification requires a final one-shot `run_end` with `status: "passed"`, a zero process exit code, and no output overflow. Unknown, missing, malformed, timed out, or contradictory results stay non-green.
-- The agent does not commit, merge, push, deploy, or change the fixed objective through PatchLoop.
+Only a final Kane `run_end` event, a successful verdict, and exit code zero set the task to `verified`. A failed final result moves to `needs_review`; malformed output, missing `run_end`, a spawn error, or timeout cannot be green. The user explicitly authorizes a Codex call. Codex receives the task, original objective/hash, and redacted Kane output. It has workspace-write permissions in the isolated worktree. A separate Kane run is required after repair.
 
-## Hosted worker mode (optional)
+## State
 
-Google OAuth signs in the hosted UI. A one-time pairing code exchanges for an owner-scoped bearer token. The worker sends a sanitized target catalog (IDs, labels, readiness) and polls for a claimed run. It keeps CLI profiles, target checkout paths, worktrees, and task app data local.
+`Store` persists JSON at `.patchloop/state.json` by temp-file write and rename. Run events are appended and attempts are recorded separately. This is local persistence, not cryptographic tamper evidence; a local user with filesystem access can alter the file. Each attempt records objective hash, process exit, timestamps, bounded output, and the parsed final event. Tokens and signed URLs are redacted before persistence.
 
-The current service stores pairing codes and OAuth state in process memory and writes JSON state to one local file. It is a single-instance design; horizontal scaling and ephemeral-disk deployments are unsupported. The paired worker is trusted to execute approved tasks, and a compromised worker could still forge reports. Server-side report checks enforce basic objective and Kane-result consistency but are not cryptographic attestation.
+Worktrees are retained for review. PatchLoop does not merge or commit agent changes. Use the downloaded diff for human review and manual application.
 
-## Persistence and failure
+## Boundaries and limits
 
-Local JSON writes use a temporary file and atomic rename. Local worktrees live below `.patchloop/worktrees/<run-id>`. Repair attempts are capped at two. A stale worker claim becomes inconclusive and requires inspection before retry; it is not silently replayed. A process crash may leave the worktree for recovery, but external CLI processes may have stopped mid-run.
-
-## Security boundaries and limits
-
-- Local server default: `127.0.0.1`. Do not expose it to a public network.
-- Local runner only permits HTTPS for remote hosted servers; plaintext HTTP is accepted for loopback development. Redirects are rejected on credentialed requests.
-- Child target processes receive an allowlisted environment plus the declared target manifest values; host OAuth/session variables are not inherited.
-- Kane/Codex profiles stay in the local user home directory. Worker token file is a bearer credential and must be protected.
-- Codex edits target code in an isolated worktree, but target install/start code and Codex remain local processes. Register only repositories you trust.
-- JSON state is not tamper-proof. A local user with filesystem access can edit it.
-- Hosted OAuth, TLS, persistent storage, backups, and recovery have not been validated in a live deployment.
+- Default bind: `127.0.0.1`. Docker binds its published port to host loopback.
+- Browser writes are same-origin checked; API bodies are size-limited.
+- CLI entry points are resolved from known global package locations or explicit local environment overrides. No shell interpolation is used for Codex or Kane.
+- Codex may execute code in its sandboxed worktree. Treat a target repository and its scripts as code you trust.
+- The Node target contract is `server.mjs`, `/api/health`, `PATCHLOOP_PORT`, and `PATCHLOOP_DATA_DIR`. Other app shapes need an adapter before they are supported.
+- The first demo baseline uses a local synthetic git author identity (`local@patchloop.invalid`); this is only metadata for its isolated bundled target, not a person or event commit.
+- Docker does not mount host CLI profiles. A full live repair loop runs natively with host-installed tools.
+- The hosted runner keeps provider CLI profiles and target worktrees local, but task text, progress, CLI evidence, and the reviewable diff are synced to Render for the private web history. Do not submit secrets in task text or run repositories you do not trust on your computer.
+- Hosted JSON state and pairing metadata require the configured persistent disk and a single web-service instance. The current queue is not a distributed or horizontally scaled worker system.

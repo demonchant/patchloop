@@ -2,34 +2,166 @@ const $ = (selector) => document.querySelector(selector);
 const form = $('#run-form');
 const taskInput = $('#task');
 const objectiveInput = $('#objective');
-const targetSelect = $('#target-repo');
 const runsElement = $('#runs');
 const notice = $('#notice');
 const detailDialog = $('#detail-dialog');
-let session = null;
-let availableTargets = [];
+let lastRuns = [];
+let activeSession = null;
 let pairingExpiresAt = null;
 let pairingTimer = null;
-let runsLoadedOnce = false;
-const announcedRunStates = new Map();
+let availableTargets = [];
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-const time = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Time not recorded';
-const stateNames = { queued: 'Queued', verifying: 'Kane is checking', needs_review: 'Review the failure', repairing: 'Codex is repairing', agent_error: 'Agent stopped', unresolved: 'Ready to retest', inconclusive: 'Inconclusive', setup_error: 'Setup needs attention', verified: 'Verified by Kane' };
+const humanState = (state) => ({ needs_review: 'Review failure', setup_error: 'Setup error', agent_error: 'Agent error', inconclusive: 'Inconclusive', unresolved: 'Still failing', verifying: 'Kane running', repairing: 'Agent working', queued: 'Queued', verified: 'Verified' })[state] ?? state;
+const stamp = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const shortHash = (value = '') => value ? value.slice(0, 12) : 'not recorded';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { ...options, headers: { ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers } });
   const text = await response.text();
   let value;
   try { value = text ? JSON.parse(text) : {}; } catch { value = text; }
-  if (!response.ok) throw new Error(value?.error ?? `Request failed (${response.status}).`);
+  if (!response.ok) throw new Error(value?.error ?? `Request failed (${response.status})`);
   return value;
 }
 
-function message(text, error = false) {
+function showNotice(message, error = false) {
   notice.hidden = false;
-  notice.textContent = text;
-  notice.classList.toggle('is-error', error);
+  notice.classList.toggle('error', error);
+  notice.textContent = message;
+}
+
+function updatePairingControls(worker = {}) {
+  const connectButton = $('#pair-worker');
+  const refreshButton = $('#refresh-pair-code');
+  const expiry = $('#pair-expiry');
+  const command = $('#pair-command');
+  const copyButton = $('#copy-pair-command');
+  if (worker.connected) {
+    if (pairingTimer) clearInterval(pairingTimer);
+    pairingTimer = null;
+    pairingExpiresAt = null;
+    command.textContent = '';
+    command.hidden = true;
+    copyButton.hidden = true;
+    expiry.hidden = true;
+    connectButton.hidden = true;
+    refreshButton.hidden = true;
+    $('#worker-state').textContent = worker.busy ? 'Your local runner is connected and processing a task.' : 'Your local runner is connected. You can give PatchLoop a task now; this page updates automatically.';
+    return;
+  }
+  if (!pairingExpiresAt) {
+    expiry.hidden = true;
+    connectButton.hidden = false;
+    connectButton.textContent = 'Connect local runner';
+    refreshButton.hidden = true;
+    $('#worker-state').textContent = 'Start the local runner on your computer to process queued tasks.';
+    return;
+  }
+  const secondsLeft = Math.max(0, Math.ceil((pairingExpiresAt - Date.now()) / 1000));
+  if (secondsLeft === 0) {
+    if (pairingTimer) clearInterval(pairingTimer);
+    pairingTimer = null;
+    pairingExpiresAt = null;
+    command.textContent = '';
+    command.hidden = true;
+    copyButton.hidden = true;
+    expiry.textContent = 'This pairing code expired. Generate a fresh code to try again.';
+    expiry.hidden = false;
+    connectButton.hidden = true;
+    refreshButton.hidden = false;
+    return;
+  }
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = String(secondsLeft % 60).padStart(2, '0');
+  expiry.textContent = `Pairing code expires in ${minutes}:${seconds}. This page will show when the runner connects.`;
+  expiry.hidden = false;
+  connectButton.hidden = true;
+  refreshButton.hidden = true;
+}
+function renderPreflight(result) {
+  if (result.hosted) {
+    const worker = result.worker ?? {};
+    $('#preflight').innerHTML = `<div class="preflight-row"><span class="preflight-name">Private local runner</span><span class="preflight-value ${worker.connected ? 'ok' : 'bad'}">${worker.connected ? (worker.busy ? 'Working' : 'Connected') : 'Offline'}</span></div><div class="preflight-row"><span class="preflight-name">Provider sign-ins</span><span class="preflight-value">Stay on your computer</span></div>`;
+    updatePairingControls(worker);
+    return;
+  }
+  const rows = [
+    ['Kane CLI', result.kane.installed ? result.kane.version : 'Not found'],
+    ['Kane sign-in', result.kane.authenticated ? 'Authenticated' : 'Sign-in needed'],
+    ['Coding agent', result.agent.installed ? result.agent.version : 'Not found'],
+    ['Target repo', result.target.ok ? result.target.mode : 'Not ready'],
+  ];
+  $('#preflight').innerHTML = rows.map(([label, value], index) => {
+    const good = index === 0 ? result.kane.installed : index === 1 ? result.kane.authenticated : index === 2 ? result.agent.installed : result.target.ok;
+    return `<div class="preflight-row"><span class="preflight-name">${escapeHtml(label)}</span><span class="preflight-value ${good ? 'ok' : 'bad'}">${escapeHtml(value)}</span></div>`;
+  }).join('');
+}
+
+async function loadTargets() {
+  const select = $('#target-repo');
+  try {
+    const { targets = [] } = await api('/api/targets');
+    availableTargets = targets.filter((target) => target.ready);
+    const current = select.value;
+    const nextOptions = availableTargets.length
+      ? availableTargets.map((target) => ({ id: target.id, name: target.name }))
+      : [{ id: '', name: 'Connect a runner to load repositories' }];
+    const optionsUnchanged = select.options.length === nextOptions.length
+      && nextOptions.every((target, index) => select.options[index].value === target.id && select.options[index].textContent === target.name);
+    if (!optionsUnchanged) {
+      select.innerHTML = nextOptions.map((target) => '<option value="' + escapeHtml(target.id) + '">' + escapeHtml(target.name) + '</option>').join('');
+      if (availableTargets.some((target) => target.id === current)) select.value = current;
+    }
+    select.disabled = !availableTargets.length;
+    const selected = availableTargets.find((target) => target.id === select.value);
+    $('#target-requirements').textContent = selected?.requirements ?? (availableTargets.length ? 'This repository runs in a disposable worktree on your paired computer.' : 'Pair your local runner first; it will report the repositories available on that computer.');
+  } catch { select.innerHTML = '<option value="">Repository list unavailable</option>'; select.disabled = true; }
+}
+$('#target-repo').addEventListener('change', () => {
+  const selected = availableTargets.find((target) => target.id === $('#target-repo').value);
+  $('#target-requirements').textContent = selected?.requirements ?? 'This repository runs in a disposable worktree on your paired computer.';
+});
+
+async function loadPreflight() {
+  if (activeSession?.mode === 'google' && !activeSession.executionEnabled) {
+    $('#preflight').innerHTML = '<div class="preflight-row"><span class="preflight-name">Hosted runner</span><span class="preflight-value bad">Not configured</span></div>';
+    return;
+  }
+  $('#preflight').innerHTML = '<div class="preflight-loading"><span class="spinner"></span> Checking local tools…</div>';
+  try { renderPreflight(await api('/api/preflight')); }
+  catch { $('#preflight').innerHTML = '<div class="preflight-row"><span class="preflight-name">Local checks</span><span class="preflight-value bad">Unavailable</span></div>'; }
+}
+
+function eventLabel(event) {
+  return ({ created: 'Task submitted', worker_claimed: 'Local runner accepted task', verification_queued: 'Kane run queued', repair_queued: 'Repair queued', worker_lost: 'Local runner disconnected', worker_disconnected: 'Local runner disconnected', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Codex repair started', repair_finished: 'Codex repair completed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
+}
+
+function renderRun(run) {
+  const latest = [...run.attempts].reverse().find((attempt) => attempt.kind === 'kane');
+  const attempts = run.attempts.filter((attempt) => attempt.kind === 'kane');
+  const lastTwo = attempts.slice(-2);
+  const repeatedFailure = lastTwo.length === 2 && lastTwo.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
+  const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
+  const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state);
+  const action = `${canReplay ? `<button class="small-button" data-action="verify" data-id="${run.id}">${run.repairCount ? 'Run same Kane check ↻' : (repeatedFailure ? 'Replay again ↻' : 'Replay before repair ↻')}</button>` : ''}${canRepair ? `<button class="small-button danger" data-action="repair" data-id="${run.id}">Send repeated failure to Codex ↗</button>` : ''}`;
+  const runDetails = `${run.attempts.length} recorded step${run.attempts.length === 1 ? '' : 's'}`;
+  const latestText = latest ? `${latest.verdict}${latest.resultCode !== null ? ` · code ${latest.resultCode}` : ''}` : 'Waiting for Kane';
+  return `<article class="run-card" data-run-card="${run.id}">
+    <div class="run-main"><div class="run-status status-${escapeHtml(run.state)}"><i class="status-dot"></i>${escapeHtml(humanState(run.state))}</div>
+      <div class="run-copy"><div class="run-task">${escapeHtml(run.task)}</div><div class="run-meta"><span>${escapeHtml(stamp(run.createdAt))}</span><span>${escapeHtml(runDetails)}</span><span>${escapeHtml(latestText)}</span><span>objective ${escapeHtml(shortHash(run.objectiveHash))}</span></div></div>
+      <div class="run-actions">${action}<button class="small-button" data-action="details" data-id="${run.id}">Details</button></div></div>
+    <button class="run-expand" type="button" data-action="details" data-id="${run.id}">Open immutable objective and evidence ↓</button>
+  </article>`;
+}
+
+async function loadRuns() {
+  try {
+    const { runs } = await api('/api/runs');
+    lastRuns = runs;
+    $('#run-count').textContent = String(runs.length);
+    runsElement.innerHTML = runs.length ? runs.map(renderRun).join('') : '<div class="empty-state"><div class="empty-mark">↻</div><strong>No runs yet</strong><p>Your first real Kane verification will appear here.</p></div>';
+  } catch (error) { showNotice(error.message, true); }
 }
 
 function counts() {
@@ -37,178 +169,9 @@ function counts() {
   $('#objective-count').textContent = `${objectiveInput.value.length} / 1800`;
 }
 
-function renderPreflight(result) {
-  const preflight = $('#preflight');
-  const workerConnect = $('#worker-connect');
-  if (result.hosted) {
-    const worker = result.worker ?? {};
-    const rows = [
-      ['Local runner', worker.connected ? (worker.busy ? 'Processing a task' : 'Connected') : 'Offline', worker.connected],
-      ['Registered targets', String((worker.targets ?? []).filter((target) => target.ready).length), worker.connected && (worker.targets ?? []).some((target) => target.ready)],
-      ['Provider sign-ins', 'Stay on this computer', true],
-    ];
-    preflight.innerHTML = rows.map(([label, value, good]) => `<div class="preflight-row"><span>${escapeHtml(label)}</span><strong class="${good ? 'ok' : 'bad'}">${escapeHtml(value)}</strong></div>`).join('');
-    workerConnect.hidden = !result.executionEnabled;
-    updatePairingControls(worker);
-    updateReadyStamp(Boolean(worker.connected && (worker.targets ?? []).some((target) => target.ready)));
-    return;
-  }
-  workerConnect.hidden = true;
-  const rows = [
-    ['Kane CLI', result.kane?.installed ? result.kane.version : 'Not found', result.kane?.installed],
-    ['Kane sign-in', result.kane?.authenticated ? 'Authenticated' : 'Sign-in needed', result.kane?.authenticated],
-    ['Codex CLI', result.agent?.installed ? result.agent.version : 'Not found', result.agent?.installed],
-    ['Target app', result.target?.ok ? result.target.name : 'Not ready', result.target?.ok],
-  ];
-  preflight.innerHTML = rows.map(([label, value, good]) => `<div class="preflight-row"><span>${escapeHtml(label)}</span><strong class="${good ? 'ok' : 'bad'}">${escapeHtml(value ?? '')}</strong></div>`).join('');
-  updateReadyStamp(Boolean(result.kane?.authenticated && result.agent?.installed && result.target?.ok));
-}
+const demoTask = 'Add archive and restore actions for completed tasks. Archived tasks must disappear from Active and appear in Archived. Restoring a task must preserve its title and completed status.';
+const demoObjective = "On the Tasks page, add a task named 'Pay electricity bill', mark it completed, archive it, verify it is absent from Active and present in Archived, restore it, and verify it returns to Active with Completed status.";
 
-function updateReadyStamp(ready) {
-  const stamp = $('#ready-stamp');
-  if (!stamp) return;
-  stamp.classList.toggle('is-unready', !ready);
-  stamp.innerHTML = `<i></i> ${ready ? 'Ready' : 'Not ready'}`;
-}
-
-function updatePairingControls(worker = {}) {
-  const connect = $('#pair-worker');
-  const refresh = $('#refresh-pair-code');
-  const command = $('#pair-command');
-  const copy = $('#copy-pair-command');
-  const expiry = $('#pair-expiry');
-  if (worker.connected) {
-    if (pairingTimer) clearInterval(pairingTimer);
-    pairingTimer = null;
-    pairingExpiresAt = null;
-    connect.hidden = true;
-    refresh.hidden = true;
-    command.hidden = true;
-    copy.hidden = true;
-    expiry.hidden = true;
-    $('#worker-state').textContent = worker.busy ? 'Runner connected and processing a task.' : 'Runner connected. It will pick up work from this private session.';
-    return;
-  }
-  if (!pairingExpiresAt) {
-    connect.hidden = false;
-    refresh.hidden = true;
-    command.hidden = true;
-    copy.hidden = true;
-    expiry.hidden = true;
-    $('#worker-state').textContent = 'Connect the computer that has Kane and Codex installed.';
-    return;
-  }
-  const seconds = Math.max(0, Math.ceil((pairingExpiresAt - Date.now()) / 1000));
-  if (!seconds) {
-    if (pairingTimer) clearInterval(pairingTimer);
-    pairingTimer = null;
-    pairingExpiresAt = null;
-    command.textContent = '';
-    command.hidden = true;
-    copy.hidden = true;
-    expiry.textContent = 'Pairing code expired. Create a fresh code to continue.';
-    expiry.hidden = false;
-    connect.hidden = true;
-    refresh.hidden = false;
-    return;
-  }
-  expiry.textContent = `Pairing code expires in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.`;
-  expiry.hidden = false;
-  connect.hidden = true;
-  refresh.hidden = true;
-}
-
-async function loadPreflight() {
-  $('#preflight').innerHTML = '<p class="loading-line">Checking your runner…</p>';
-  try { renderPreflight(await api('/api/preflight')); }
-  catch (error) { $('#preflight').innerHTML = `<p class="preflight-error">${escapeHtml(error.message)}</p>`; updateReadyStamp(false); }
-}
-
-async function loadTargets() {
-  try {
-    const { targets = [] } = await api('/api/targets');
-    availableTargets = targets;
-    const ready = targets.filter((target) => target.ready);
-    const previous = targetSelect.value;
-    targetSelect.innerHTML = ready.length
-      ? ready.map((target) => `<option value="${escapeHtml(target.id)}">${escapeHtml(target.name)}</option>`).join('')
-      : '<option value="">Connect a runner with a ready target</option>';
-    if (ready.some((target) => target.id === previous)) targetSelect.value = previous;
-    targetSelect.disabled = !ready.length;
-    $('#target-requirements').textContent = ready.find((target) => target.id === targetSelect.value)?.requirements ?? 'Connect your local runner to register a repository.';
-    $('#submit-run').disabled = !ready.length;
-    if (session?.mode === 'local') updateReadyStamp(Boolean(ready.length && !$('#preflight').querySelector('.preflight-row strong.bad')));
-  } catch (error) {
-    availableTargets = [];
-    targetSelect.innerHTML = '<option value="">Repository list unavailable</option>';
-    targetSelect.disabled = true;
-    $('#submit-run').disabled = true;
-    $('#target-requirements').textContent = error.message;
-  }
-}
-
-targetSelect.addEventListener('change', () => {
-  $('#target-requirements').textContent = availableTargets.find((target) => target.id === targetSelect.value)?.requirements ?? 'This repository runs in an isolated worktree on your computer.';
-});
-
-function repeatedFailure(run) {
-  const kane = run.attempts.filter((attempt) => attempt.kind === 'kane').slice(-2);
-  return kane.length === 2 && kane.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
-}
-
-function updateRoute(run) {
-  const steps = [...document.querySelectorAll('[data-route-step]')];
-  if (!run) {
-    steps.forEach((item, index) => item.className = index === 0 ? 'is-current' : '');
-    $('#route-status').textContent = 'Ready for a task';
-    $('#route-caption').textContent = 'Each step leaves a record you can inspect.';
-    return;
-  }
-  const hasKane = run.attempts.some((attempt) => attempt.kind === 'kane');
-  const hasAgent = run.attempts.some((attempt) => attempt.kind === 'agent');
-  let current = 0;
-  let caption = 'The original objective is saved with this run.';
-  if (['queued', 'verifying'].includes(run.state)) { current = 1; caption = 'Kane is checking the selected app in a real browser.'; }
-  else if (['needs_review', 'agent_error'].includes(run.state)) { current = repeatedFailure(run) ? 2 : 1; caption = repeatedFailure(run) ? 'The same failure reproduced. Review it before approving Codex.' : 'Review the first result and replay the unchanged objective.'; }
-  else if (run.state === 'repairing') { current = 2; caption = 'Codex is working in the isolated target worktree.'; }
-  else if (run.state === 'unresolved' || (hasAgent && run.state === 'inconclusive')) { current = 3; caption = 'Review the diff, then rerun the saved objective with Kane.'; }
-  else if (run.state === 'verified') { current = 4; caption = 'Kane passed the same objective after a reviewable repair.'; }
-  else if (run.state === 'setup_error') { current = 1; caption = 'Fix the runner or target setup before retrying.'; }
-  else if (run.state === 'inconclusive') { current = 1; caption = 'The result is uncertain. Review the record before continuing.'; }
-  steps.forEach((item, index) => {
-    item.className = index < current ? 'is-done' : (index === current ? (run.state === 'setup_error' ? 'is-alert' : 'is-current') : '');
-  });
-  $('#route-status').textContent = stateNames[run.state] ?? run.state;
-  $('#route-caption').textContent = caption;
-}
-
-function renderRun(run) {
-  const latest = [...run.attempts].reverse().find((attempt) => attempt.kind === 'kane');
-  const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state);
-  const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure(run));
-  const actions = `${canReplay ? `<button class="row-action" data-action="verify" data-id="${escapeHtml(run.id)}">${run.repairCount ? 'Rerun same check' : (repeatedFailure(run) ? 'Replay again' : 'Replay before repair')}</button>` : ''}${canRepair ? `<button class="row-action row-action-repair" data-action="repair" data-id="${escapeHtml(run.id)}">Approve Codex repair</button>` : ''}<button class="row-action row-action-detail" data-action="details" data-id="${escapeHtml(run.id)}">Evidence</button>`;
-  return `<article class="run-row"><div class="run-row-main"><div class="run-state state-${escapeHtml(run.state)}"><i></i><span>${escapeHtml(stateNames[run.state] ?? run.state)}</span></div><div class="run-summary"><strong>${escapeHtml(run.task)}</strong><div><span>${escapeHtml(time(run.createdAt))}</span><span>${run.attempts.length} recorded step${run.attempts.length === 1 ? '' : 's'}</span><span>Objective ${escapeHtml(run.objectiveHash.slice(0, 10))}</span>${latest ? `<span>Latest Kane: ${escapeHtml(latest.verdict)}</span>` : ''}</div></div><div class="run-actions">${actions}</div></div></article>`;
-}
-
-async function loadRuns() {
-  try {
-    const { runs = [] } = await api('/api/runs');
-    for (const run of runs) {
-      const previous = announcedRunStates.get(run.id);
-      if (runsLoadedOnce && previous && previous !== run.state) {
-        $('#run-announcement').textContent = `${run.task}: ${stateNames[run.state] ?? run.state}.`;
-      }
-      announcedRunStates.set(run.id, run.state);
-    }
-    runsLoadedOnce = true;
-    $('#run-count').textContent = String(runs.length);
-    runsElement.innerHTML = runs.length ? runs.map(renderRun).join('') : '<div class="empty-state"><span class="empty-glyph">∿</span><strong>No verification runs yet</strong><p>Choose a target and describe the browser behavior to begin.</p></div>';
-    updateRoute(runs[0]);
-  } catch (error) { message(error.message, true); }
-}
-
-const demoTask = 'Fix the showcase restore regression so a completed task keeps its completed state and title after it is restored from Archived.';
-const demoObjective = "On the Tasks page, create a task named 'PatchLoop repair proof', mark it complete, archive it, confirm it is absent from Active and present in Archived, restore it, then confirm it is back in Active with the same title and its completed checkbox still checked.";
 $('#load-example').addEventListener('click', () => {
   taskInput.value = demoTask;
   objectiveInput.value = demoObjective;
@@ -217,29 +180,34 @@ $('#load-example').addEventListener('click', () => {
 });
 taskInput.addEventListener('input', counts);
 objectiveInput.addEventListener('input', counts);
+$('#refresh').addEventListener('click', () => { void loadRuns(); void loadPreflight(); void loadTargets(); });
+$('#check-setup').addEventListener('click', () => void loadPreflight());
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && activeSession?.mode === 'google') { void loadPreflight(); void loadTargets(); }
+});
 
-async function createPairing(button) {
+async function createPairingCode(button) {
   button.disabled = true;
   try {
     const { code, expiresInSeconds = 600 } = await api('/api/worker/pair', { method: 'POST', body: '{}' });
     const command = `npm run worker -- --url ${location.origin} --pair-code ${code}`;
-    $('#pair-command').textContent = `${command}\n\nAfter pairing, restart without the code: npm run worker -- --url ${location.origin}`;
+    pairingExpiresAt = Date.now() + expiresInSeconds * 1000;
+    $('#pair-command').textContent = `${command}\n\nThis code works once. After pairing, start the runner with: npm run worker -- --url ${location.origin}`;
     $('#pair-command').hidden = false;
     $('#copy-pair-command').hidden = false;
     $('#refresh-pair-code').hidden = true;
-    pairingExpiresAt = Date.now() + expiresInSeconds * 1000;
     updatePairingControls();
     if (pairingTimer) clearInterval(pairingTimer);
     pairingTimer = setInterval(() => updatePairingControls(), 1000);
-    message('One-time code created. Run the command on the computer with Kane and Codex installed.');
-  } catch (error) { message(error.message, true); }
+    showNotice('Pairing code created. Run the first command on the computer with Kane and Codex installed.');
+  } catch (error) { showNotice(error.message, true); }
   finally { button.disabled = false; }
 }
-$('#pair-worker').addEventListener('click', (event) => void createPairing(event.currentTarget));
-$('#refresh-pair-code').addEventListener('click', (event) => void createPairing(event.currentTarget));
+$('#pair-worker').addEventListener('click', (event) => void createPairingCode(event.currentTarget));
+$('#refresh-pair-code').addEventListener('click', (event) => void createPairingCode(event.currentTarget));
 $('#copy-pair-command').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('#pair-command').textContent.split('\n')[0]); message('Pairing command copied.'); }
-  catch { message('Clipboard access was blocked. Select and copy the first line.'); }
+  try { await navigator.clipboard.writeText($('#pair-command').textContent.split('\n')[0]); showNotice('Pairing command copied.'); }
+  catch { showNotice('Copy was blocked by the browser. Select and copy the first line.', true); }
 });
 
 form.addEventListener('submit', async (event) => {
@@ -249,26 +217,22 @@ form.addEventListener('submit', async (event) => {
   button.disabled = true;
   notice.hidden = true;
   try {
-    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value, targetId: targetSelect.value }) });
-    message(session?.mode === 'google' ? `Run ${run.id.slice(0, 8)} queued for your local runner.` : `Run ${run.id.slice(0, 8)} started. Kane is opening the target app.`);
+    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value, targetId: $('#target-repo').value }) });
+    showNotice(activeSession?.mode === 'google' ? `Task ${run.id.slice(0, 8)} is queued for your local runner.` : `Task ${run.id.slice(0, 8)} created. Kane is starting a real browser run.`);
     taskInput.value = '';
     objectiveInput.value = '';
     counts();
     await loadRuns();
-  } catch (error) { message(error.message, true); }
-  finally { button.disabled = !availableTargets.some((target) => target.ready); }
+  } catch (error) { showNotice(error.message, true); }
+  finally { button.disabled = false; }
 });
-
-function eventName(event) {
-  return ({ created: 'Objective saved', worker_claimed: 'Runner accepted the task', verification_queued: 'Kane check queued', repair_queued: 'Codex repair queued', verification_started: 'Kane started the browser check', verification_finished: 'Kane finished the check', repair_started: 'Codex repair started', repair_finished: 'Codex repair finished', setup_error: 'Setup stopped', agent_error: 'Agent stopped' })[event.type] ?? event.type.replaceAll('_', ' ');
-}
 
 async function showDetails(id) {
   const { run } = await api(`/api/runs/${id}`);
-  const attempts = run.attempts.map((attempt) => `<section class="detail-attempt"><div class="attempt-heading"><strong>${escapeHtml(attempt.kind === 'kane' ? 'Kane browser check' : 'Codex repair')}</strong><span>${escapeHtml(attempt.verdict ?? (attempt.changed ? 'Diff produced' : 'Finished'))}</span></div><p>${escapeHtml(`Started ${time(attempt.startedAt)} · exit ${attempt.exitCode ?? 'unknown'}${attempt.resultCode != null ? ` · result ${attempt.resultCode}` : ''}${attempt.timedOut ? ' · timed out' : ''}`)}</p><pre>${escapeHtml(attempt.outputTail ?? attempt.finalEvent ?? 'No tool output recorded.')}</pre></section>`).join('');
-  const events = run.events.map((item) => `<li><time>${escapeHtml(time(item.at))}</time><span>${escapeHtml(eventName(item))}</span><p>${escapeHtml(item.message)}</p></li>`).join('');
-  const diff = run.lastDiff ? `<a class="button button-secondary" href="/api/runs/${run.id}/diff" download="patchloop-${run.id}.patch">Download reviewed diff</a>` : '<p class="detail-empty">No code diff has been recorded.</p>';
-  $('#detail-body').innerHTML = `<section class="detail-block"><p class="panel-kicker">CHANGE REQUEST</p><p>${escapeHtml(run.task)}</p></section><section class="detail-block"><p class="panel-kicker">FIXED OBJECTIVE · SHA-256 ${escapeHtml(run.objectiveHash)}</p><p class="detail-objective">${escapeHtml(run.objective)}</p></section><section class="detail-block"><div class="diff-heading"><div><p class="panel-kicker">WORKTREE DIFF</p><p>${escapeHtml(run.diffStat || 'No changed files')}</p></div>${diff}</div></section>${attempts}<section class="detail-block"><p class="panel-kicker">RUN TIMELINE</p><ol class="detail-timeline">${events}</ol></section>`;
+  const attempts = run.attempts.map((attempt) => `<section class="dialog-section"><div class="detail-label">${escapeHtml(attempt.kind.toUpperCase())} · ${escapeHtml(attempt.id)} · ${escapeHtml(attempt.verdict ?? (attempt.changed ? 'CHANGED FILES' : 'COMPLETE'))}</div><p>${escapeHtml(`Started ${stamp(attempt.startedAt)} · exit ${attempt.exitCode ?? 'unknown'}${attempt.resultCode !== undefined && attempt.resultCode !== null ? ` · result code ${attempt.resultCode}` : ''}${attempt.reasonCode ? ` · ${attempt.reasonCode}` : ''}${attempt.timedOut ? ' · timed out' : ''}`)}</p><pre>${escapeHtml(attempt.outputTail ?? attempt.finalEvent ?? 'No CLI output recorded.')}</pre></section>`).join('');
+  const events = run.events.map((item) => `<p><span class="detail-label">${escapeHtml(stamp(item.at))} · ${escapeHtml(eventLabel(item))}</span><br>${escapeHtml(item.message)}</p>`).join('');
+  const diff = run.lastDiff ? `<div class="detail-actions"><a class="small-button" href="/api/runs/${id}/diff" download="patchloop-${id}.patch">Download worktree diff</a></div>` : '<p>No code diff recorded.</p>';
+  $('#detail-body').innerHTML = `<section class="dialog-section"><div class="detail-label">REQUESTED CHANGE</div><p>${escapeHtml(run.task)}</p></section><section class="dialog-section"><div class="detail-label">FIXED OBJECTIVE · SHA-256 ${escapeHtml(run.objectiveHash)}</div><p class="objective-lock">⌑ ${escapeHtml(run.objective)}</p></section><section class="dialog-section"><div class="detail-label">WORKTREE DIFF · ${escapeHtml(run.diffStat || 'No changes')}</div>${diff}</section>${attempts}<section class="dialog-section"><div class="detail-label">TIMELINE</div>${events}</section>`;
   detailDialog.showModal();
 }
 
@@ -279,59 +243,75 @@ runsElement.addEventListener('click', async (event) => {
   try {
     if (action === 'details') await showDetails(id);
     if (action === 'repair') {
-      if (!confirm('Send the two matching Kane failures to Codex in the isolated target worktree?')) return;
+      if (!confirm('Send this recorded Kane failure and the original task to Codex in an isolated worktree?')) return;
       await api(`/api/runs/${id}/repair`, { method: 'POST' });
-      message('Codex repair approved and queued. The fixed objective remains unchanged.');
+      showNotice(activeSession?.mode === 'google' ? 'Repair queued for your local runner. The recorded evidence and objective remain unchanged.' : 'Repair started. Codex received the recorded Kane failure; the objective remains unchanged.');
       await loadRuns();
     }
     if (action === 'verify') {
       await api(`/api/runs/${id}/verify`, { method: 'POST' });
-      message('The original objective is queued for Kane again.');
+      showNotice(activeSession?.mode === 'google' ? 'The unchanged objective is queued for your local runner.' : 'Kane is rerunning the original objective against the repaired worktree.');
       await loadRuns();
     }
-  } catch (error) { message(error.message, true); }
+  } catch (error) { showNotice(error.message, true); }
 });
 
 $('#close-dialog').addEventListener('click', () => detailDialog.close());
 detailDialog.addEventListener('click', (event) => { if (event.target === detailDialog) detailDialog.close(); });
 $('#sign-out').addEventListener('click', async () => {
-  try { await api('/auth/logout', { method: 'POST' }); location.reload(); }
-  catch (error) { message(error.message, true); }
+  try {
+    await api('/auth/logout', { method: 'POST' });
+    location.reload();
+  } catch (error) { showNotice(error.message, true); }
 });
 
 async function initialize() {
   try {
-    session = await api('/api/session');
-    if (session.mode === 'google' && !session.authenticated) {
+    activeSession = await api('/api/session');
+    if (activeSession.mode === 'google' && !activeSession.authenticated) {
       document.body.dataset.screen = 'signin';
       $('#sign-in-screen').hidden = false;
       $('#app-main').hidden = true;
+      if (activeSession.authReady === false) {
+        $('.google-sign-in').hidden = true;
+        $('#sign-in-error').hidden = false;
+        $('#sign-in-error').textContent = 'Google sign-in is not configured yet. The site owner must add the OAuth client ID and secret in Render.';
+        $('.privacy').innerHTML = '<i></i> Setup pending';
+      } else $('.privacy').innerHTML = '<i></i> Sign in required';
       return;
     }
     document.body.dataset.screen = 'workbench';
     $('#sign-in-screen').hidden = true;
     $('#app-main').hidden = false;
-    if (session.mode === 'google') {
+    if (activeSession.mode === 'google') {
+      const identity = activeSession.user?.name || activeSession.user?.email || 'Google account';
       $('#session-bar').hidden = false;
-      $('#signed-in-user').textContent = session.user?.email || session.user?.name || 'Signed in';
-      if (!session.executionEnabled) {
-        $('#hosted-notice').textContent = 'The hosted runner is not enabled. Your private account is available, but tasks cannot be run yet.';
+      $('#signed-in-user').textContent = `Private session · ${identity}`;
+      $('.privacy').innerHTML = '<i></i> Private session';
+      if (!activeSession.executionEnabled) {
         $('#hosted-notice').hidden = false;
+        $('#submit-run').disabled = true;
+        $('.form-hint').textContent = 'Live Kane/Codex runs are waiting for the isolated hosted worker.';
+        $('#setup-title').textContent = 'Hosted runner';
+        $('.privacy-note span:last-child').textContent = 'Your run records are scoped to your Google account. Task execution is turned off for this deployment.';
+      } else {
+        $('#worker-connect').hidden = false;
+        $('#setup-title').textContent = 'Your local runner';
+        $('.form-hint').textContent = 'Runs on your computer with your Kane and Codex sign-ins.';
+        $('.privacy-note span:last-child').textContent = 'Task execution and provider sign-ins stay on your computer. Only run history and review evidence sync to your private session.';
       }
     }
     await Promise.all([loadPreflight(), loadTargets(), loadRuns()]);
+    if (activeSession.mode === 'google') setInterval(() => { void loadRuns(); void loadPreflight(); void loadTargets(); }, 3000);
+    if (activeSession.mode === 'local') setInterval(() => { void loadRuns(); }, 1800);
   } catch (error) {
     document.body.dataset.screen = 'signin';
     $('#sign-in-screen').hidden = false;
     $('#app-main').hidden = true;
-    $('#sign-in-error').textContent = error.message;
     $('#sign-in-error').hidden = false;
+    $('#sign-in-error').textContent = `PatchLoop could not load your session: ${error.message}`;
   }
 }
 
-$('#refresh').addEventListener('click', () => { void loadPreflight(); void loadTargets(); void loadRuns(); });
-$('#check-setup').addEventListener('click', () => { void loadPreflight(); void loadTargets(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { void loadPreflight(); void loadTargets(); void loadRuns(); } });
 counts();
 void initialize();
-setInterval(() => { if (session?.authenticated || session?.mode === 'local') { void loadRuns(); void loadPreflight(); void loadTargets(); } }, 2500);

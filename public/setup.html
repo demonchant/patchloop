@@ -3,63 +3,83 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="theme-color" content="#e7efed">
-    <title>Setup — PatchLoop</title>
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#101112">
+    <title>PatchLoop setup guide</title>
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/auth.css">
   </head>
-  <body>
+  <body data-screen="workbench">
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="PatchLoop home"><svg class="brand-mark" viewBox="0 0 40 40" role="img" aria-label=""><path d="M8 9h22v6H15v8h12v6H15v7H8z"/><path d="M30 8l4 4-4 4" class="brand-mark-signal"/></svg><span>PatchLoop</span></a>
-        <div class="topbar-right"><a class="top-link" href="/">Return to the workbench</a></div>
+        <a class="brand" href="/" aria-label="PatchLoop home"><span class="brand-mark" aria-hidden="true">↻</span><span>patchloop</span><span class="brand-tag">RUNNER SETUP</span></a>
+        <div class="topbar-right"><a class="setup-link" href="/">Back to PatchLoop →</a></div>
       </header>
-      <main class="setup-main">
+
+      <main class="setup-page">
         <section class="setup-intro">
-          <p class="overline"><span class="overline-rule"></span> GET YOUR RUNNER READY</p>
-          <h1>One site.<br>Your own <span>runner.</span></h1>
-          <p>PatchLoop keeps the session and run record online. Kane, Codex, browser sessions, source code, and worktrees stay on the computer you pair.</p>
+          <div class="eyebrow"><span class="eyebrow-line"></span> RUN PATCHLOOP FROM A LINK</div>
+          <h1>Sign in on the site.<br><em>Run tools on your computer.</em></h1>
+          <p>Google keeps your hosted PatchLoop session and run history private. A small local runner uses the Kane and Codex CLI sign-ins on your computer and never uploads their local authentication stores.</p>
         </section>
-        <section class="setup-grid" aria-label="Setup steps">
-          <article class="setup-step">
-            <div class="setup-step-head"><span>01</span><h2>Install your tools</h2></div>
-            <p>Use Node.js 20 or newer, Git, and Chrome on the computer that will run the checks.</p>
-            <pre>npm install -g @testmuai/kane-cli @openai/codex
-kane-cli login --oauth
-codex login</pre>
-            <p>Confirm your Kane account has credits and Codex is signed in before starting a demo.</p>
+
+        <section class="hosted-notice" role="status">
+          The Render site queues tasks and stores private run records. The local runner performs Kane browser checks and Codex repairs on your computer. Keep the runner open while you want tasks to run.
+        </section>
+
+        <section class="setup-grid" aria-label="What you need to use PatchLoop">
+          <article class="panel setup-step">
+            <div class="eyebrow small">01 · PATCHLOOP ACCOUNT</div>
+            <h2>Sign in with Google</h2>
+            <p>Google identifies your private PatchLoop session. It does not sign you into Kane or Codex. Run records are scoped to the Google account that created them.</p>
+            <span class="setup-status">No provider credential form</span>
           </article>
-          <article class="setup-step">
-            <div class="setup-step-head"><span>02</span><h2>Prepare the target app</h2></div>
-            <p>The target and PatchLoop are separate Git checkouts. Clone the supplied showcase target on the runner computer, then commit its reviewed baseline.</p>
-            <pre>git clone https://github.com/demonchant/patchloop-full-showcase2.git
-cd patchloop-full-showcase2
-npm start</pre>
-            <p>The manifest's local start command executes with your user permissions. Read it before registering this repository.</p>
+
+          <article class="panel setup-step">
+            <div class="eyebrow small">02 · BROWSER VERIFICATION</div>
+            <h2>Kane CLI</h2>
+            <p>Install Kane on the computer that will run the local helper, sign in using your TestMu account, and make sure your account has available Kane credits.</p>
+            <pre>npm install -g @testmuai/kane-cli
+kane-cli login --oauth</pre>
+            <a class="setup-doc-link" href="https://www.testmuai.com/docs/kane-cli-authentication" rel="noreferrer">Kane authentication guide →</a>
           </article>
-          <article class="setup-step">
-            <div class="setup-step-head"><span>03</span><h2>Pair and choose</h2></div>
-            <p>Set the target path in the runner terminal before starting or pairing.</p>
-            <pre>$target = Join-Path $HOME 'patchloop-full-showcase2'
-$env:PATCHLOOP_TARGET_REPO = (Resolve-Path $target).Path
-npm run worker -- --url https://YOUR-PATCHLOOP-URL --pair-code YOUR-ONE-TIME-CODE</pre>
-            <p>Use the exact command shown after generating a one-time code in the signed-in PatchLoop page. Keep it private; omit the code on later restarts.</p>
+
+          <article class="panel setup-step">
+            <div class="eyebrow small">03 · CODE REPAIR</div>
+            <h2>Codex CLI</h2>
+            <p>Install Codex CLI and sign in locally with your ChatGPT account. PatchLoop runs the CLI on your computer. No OpenAI API key, ChatGPT password, or browser session token is entered into PatchLoop.</p>
+            <pre>npm install -g @openai/codex
+codex login
+codex login status</pre>
+            <a class="setup-doc-link" href="https://developers.openai.com/codex/auth" rel="noreferrer">OpenAI Docs: Codex authentication →</a>
           </article>
         </section>
-        <section class="setup-callout">
-          <div><p class="panel-kicker">BEFORE A RUN</p><h2>Check the target baseline.</h2></div>
-          <p>PatchLoop uses the target's committed HEAD and creates an isolated worktree. Uncommitted target files are not copied. Review `patchloop.target.json` before registering a repo: its install and start commands run locally with your operating-system permissions.</p>
-        </section>
-        <section class="setup-local">
-          <p class="panel-kicker">LOCAL-ONLY OPTION</p>
-          <h2>Run the app and tools on one computer.</h2>
-          <pre>npm ci
-$env:PATCHLOOP_TARGET_REPO = (Resolve-Path 'C:\path\to\trusted-target').Path
-npm start</pre>
-          <p>Open <code>http://127.0.0.1:4173</code>. In local mode, run history and worktrees stay under `.patchloop/`. The target needs a committed Git baseline before PatchLoop can select it.</p>
+
+        <section class="panel setup-state" aria-labelledby="setup-state-title">
+          <div class="eyebrow small">CONNECT THE LOCAL RUNNER</div>
+          <h2 id="setup-state-title">Use the hosted PatchLoop page</h2>
+          <ol>
+            <li>Install Node.js 20 or newer, Git, and Chrome on your computer.</li>
+            <li>Clone the public GitHub repository and run <code>npm ci</code> in the checkout.</li>
+            <li>Open the PatchLoop website and sign in with Google.</li>
+            <li>Select <strong>Connect local runner</strong>, then run the one-time pairing command it shows in PowerShell or a terminal.</li>
+            <li>Leave that terminal open. Your local runner will claim your queued tasks and sync status and evidence to your private website session.</li>
+          </ol>
+          <pre>git clone --branch submission-ready https://github.com/demonchant/patchloop.git
+cd patchloop
+npm ci</pre>
+          <p>The pairing code expires after 10 minutes and works once. After pairing, start the runner on later days with the command shown on the page without the pairing code. Its runner token stays in the ignored <code>.patchloop/remote-worker/</code> folder on that computer. To revoke the paired runner, run <code>npm run worker -- --url YOUR_PATCHLOOP_URL --disconnect</code>.</p>
+          <p>Your Kane and Codex sign-ins, target repository, worktrees, and provider usage remain local. PatchLoop sends task text, progress, pattern-redacted CLI evidence, and the reviewable diff to your private Google-owned session so the website can display the run. Avoid putting secrets in task text or code changes.</p>
+          <p>Running your own full local workbench is also supported: use <code>npm start</code> and open <code>http://127.0.0.1:4173</code>. See the repository README for the local workflow and optional target repository setup.</p>
+          <div class="setup-links">
+            <a class="setup-doc-link" href="https://github.com/demonchant/patchloop/tree/submission-ready#try-it-locally" rel="noreferrer">Local setup in the repository →</a>
+            <a class="setup-doc-link" href="https://render.com/docs/web-services" rel="noreferrer">Render web service documentation →</a>
+            <a class="setup-doc-link" href="/">Return to PatchLoop →</a>
+          </div>
         </section>
       </main>
-      <footer><span>PATCHLOOP <b>•</b> LOCAL EXECUTION / PRIVATE RECORDS</span><span>Only an observed Kane result can verify a repair.</span></footer>
+
+      <footer><span>PATCHLOOP <b>·</b> LOCAL-FIRST AGENT QA</span><span>Only observed Kane results can verify a run.</span></footer>
     </div>
   </body>
 </html>

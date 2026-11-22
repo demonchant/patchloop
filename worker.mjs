@@ -1,99 +1,148 @@
-import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Engine } from './lib/engine.mjs';
-import { Store } from './lib/store.mjs';
+import { runProcess } from './lib/process.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DATA = path.resolve(process.env.PATCHLOOP_DATA_DIR ?? path.join(ROOT, '.patchloop'));
-const CONFIG_DIR = path.join(DATA, 'runner');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'token.json');
-const store = new Store(path.join(DATA, 'runner-state.json'));
-const engine = new Engine(store);
+const DATA_DIR = path.join(ROOT, '.patchloop', 'remote-worker');
+const CONFIG_FILE = path.join(DATA_DIR, 'worker-auth.json');
+const args = process.argv.slice(2);
+const argValue = (name) => {
+  const index = args.indexOf(name);
+  return index === -1 ? null : args[index + 1] ?? null;
+};
+const site = argValue('--url');
+const pairingCode = argValue('--pair-code');
+const disconnect = args.includes('--disconnect');
 
-function argsFor(argv) {
-  const result = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--url') result.url = argv[++i];
-    else if (argv[i] === '--pair-code') result.pairCode = argv[++i];
-    else if (argv[i] === '--disconnect') result.disconnect = true;
-    else throw new Error(`Unknown option: ${argv[i]}`);
-  }
+if (!site) {
+  process.stderr.write('Usage: npm run worker -- --url https://your-patchloop.onrender.com [--pair-code CODE]\n');
+  process.exit(2);
+}
+let siteUrl;
+try {
+  siteUrl = new URL(site);
+  if (siteUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(siteUrl.hostname)) throw new Error('HTTPS is required for the hosted runner.');
+  if (siteUrl.pathname !== '/' || siteUrl.search || siteUrl.hash) throw new Error('Pass the site origin only, without a path or query.');
+} catch (error) {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(2);
+}
+
+await mkdir(DATA_DIR, { recursive: true });
+let credentials = null;
+try { credentials = JSON.parse(await readFile(CONFIG_FILE, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+
+async function saveCredentials(value) {
+  const temporary = `${CONFIG_FILE}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  await rename(temporary, CONFIG_FILE);
+}
+
+async function request(endpoint, { method = 'GET', body, authenticated = true } = {}) {
+  const response = await fetch(new URL(endpoint, siteUrl), {
+    method,
+    headers: {
+      ...(body ? { 'content-type': 'application/json' } : {}),
+      ...(authenticated && credentials?.token ? { authorization: `Bearer ${credentials.token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15_000),
+  });
+  const content = await response.text();
+  let result;
+  try { result = content ? JSON.parse(content) : {}; } catch { result = {}; }
+  if (!response.ok) throw new Error(result.error ?? `PatchLoop request failed (${response.status}).`);
   return result;
 }
 
-const options = argsFor(process.argv.slice(2));
-if (!options.url || !/^https?:\/\//.test(options.url)) throw new Error('Usage: npm run worker -- --url https://your-patchloop-host [--pair-code CODE] [--disconnect]');
-const base = new URL(options.url);
-if (base.username || base.password) throw new Error('Runner URL cannot include credentials.');
-if (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(base.hostname))) throw new Error('Use HTTPS for remote PatchLoop sites. Plain HTTP is allowed only on loopback.');
-base.pathname = base.pathname.replace(/\/$/, '');
-
-async function request(endpoint, { token, method = 'GET', body } = {}) {
-  const response = await fetch(new URL(endpoint, base), { method, redirect: 'error', headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20_000) });
-  const value = await response.text();
-  let data;
-  try { data = value ? JSON.parse(value) : {}; } catch { data = { error: value }; }
-  if (!response.ok) throw new Error(data.error ?? `Runner request failed (${response.status}).`);
-  return data;
+if (pairingCode) {
+  const result = await request('/api/worker/exchange', { method: 'POST', body: { code: pairingCode }, authenticated: false });
+  credentials = { token: result.token, pairedAt: new Date().toISOString() };
+  await saveCredentials(credentials);
+  process.stdout.write(`Paired with ${siteUrl.origin}. The runner token is stored only in ${CONFIG_FILE}.\n`);
 }
-
-await mkdir(CONFIG_DIR, { recursive: true });
-let token;
-if (options.disconnect) {
-  try { token = JSON.parse(await readFile(CONFIG_FILE, 'utf8')).token; } catch { token = null; }
-  if (token) await request('/api/worker/disconnect', { token, method: 'POST', body: {} });
-  await unlink(CONFIG_FILE).catch(() => {});
-  process.stdout.write('Local runner disconnected and saved pairing removed.\n');
+if (!credentials?.token) {
+  process.stderr.write('This computer is not paired. Sign in to PatchLoop, create a pairing code, then pass --pair-code CODE once.\n');
+  process.exit(2);
+}
+if (disconnect) {
+  await request('/api/worker/disconnect', { method: 'POST' });
+  await unlink(CONFIG_FILE);
+  process.stdout.write('Runner disconnected and the local token file was removed.\n');
   process.exit(0);
 }
 
-if (options.pairCode) {
-  const result = await request('/api/worker/exchange', { method: 'POST', body: { code: options.pairCode } });
-  token = result.token;
-  await writeFile(CONFIG_FILE, `${JSON.stringify({ token, site: base.origin, pairedAt: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
-} else {
-  try {
-    const saved = JSON.parse(await readFile(CONFIG_FILE, 'utf8'));
-    if (saved.site !== base.origin) throw new Error('Saved runner token belongs to a different PatchLoop site.');
-    token = saved.token;
-  } catch { throw new Error('No saved pairing. Connect the runner from the hosted PatchLoop page first.'); }
+process.env.PATCHLOOP_DATA_DIR = DATA_DIR;
+const [{ Engine }, { Store }] = await Promise.all([
+  import('./lib/engine.mjs'),
+  import('./lib/store.mjs'),
+]);
+const store = new Store(path.join(DATA_DIR, 'state.json'));
+const engine = new Engine(store);
+const preflight = await engine.preflight();
+const codexAuth = await runProcess(process.execPath, [process.env.PATCHLOOP_CODEX_ENTRY ?? globalCodexEntry(), 'login', 'status'], { timeoutMs: 12_000, maxBytes: 12_000 });
+const codexUsesApiKey = /api[ -]?key/i.test(codexAuth.stdout);
+if (!preflight.kane.installed || !preflight.kane.authenticated || !preflight.agent.installed || codexAuth.code !== 0 || codexUsesApiKey) {
+  process.stderr.write('Runner setup is incomplete. Install Kane CLI and Codex CLI, sign into Kane with `kane-cli login --oauth`, and sign into Codex with `codex login`.\n');
+  process.exit(2);
 }
-
 const targets = await engine.listTargets();
-await request('/api/worker/targets', { token, method: 'POST', body: { targets } });
-process.stdout.write(`Runner connected to ${base.origin}; ${targets.filter((target) => target.ready).length} ready repository target(s). Keep this process open.\n`);
+await request('/api/worker/targets', { method: 'POST', body: { targets } });
+process.stdout.write(`Local tools ready with ${targets.filter((target) => target.ready).length} repository target(s). Watching ${siteUrl.origin} for your private tasks. Press Ctrl+C to stop.\n`);
 
-let stopped = false;
-let active = false;
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopped = true; });
+let stopping = false;
+process.on('SIGINT', () => { stopping = true; });
+process.on('SIGTERM', () => { stopping = true; });
 
-while (!stopped) {
+while (!stopping) {
   try {
-    const result = await request('/api/worker/next', { token });
-    if (result.job) {
-      active = true;
-      const { run, action } = result.job;
-      process.stdout.write(`${action === 'repair' ? 'Repair' : 'Verification'} accepted for task ${run.id.slice(0, 8)}.\n`);
-      await request('/api/worker/heartbeat', { token, method: 'POST', body: { busy: true } });
-      const heartbeat = setInterval(() => { void request('/api/worker/heartbeat', { token, method: 'POST', body: { busy: true } }).catch((error) => process.stderr.write(`Runner heartbeat issue: ${error.message}\n`)); }, 15_000);
-      let completed;
-      try { completed = await engine.runAction(run, action); }
-      finally { clearInterval(heartbeat); }
-      await request('/api/worker/report', { token, method: 'POST', body: {
-        id: completed.id, task: completed.task, objective: completed.objective, objectiveHash: completed.objectiveHash, targetId: completed.targetId,
-        state: completed.state, repairCount: completed.repairCount, attempts: completed.attempts, events: completed.events,
-        lastDiff: completed.lastDiff, diffStat: completed.diffStat,
-      } });
-      process.stdout.write(`Task ${run.id.slice(0, 8)} reported as ${completed.state}.\n`);
-      await request('/api/worker/heartbeat', { token, method: 'POST', body: { busy: false } });
-      active = false;
+    const response = await request('/api/worker/next');
+    if (!response.run) {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
       continue;
     }
+    const remoteRun = response.run;
+    const action = remoteRun.workerAction;
+    await store.importWorkerRun(remoteRun, action);
+    process.stdout.write(`Running ${action} for ${remoteRun.id}. Task and provider execution remain on this computer.\n`);
+    let reportRunning = false;
+    const report = async () => {
+      if (reportRunning) return;
+      reportRunning = true;
+      try {
+        const current = await store.get(remoteRun.id);
+        if (current) await request('/api/worker/report', { method: 'POST', body: current });
+      } catch (error) { process.stderr.write(`Progress sync delayed: ${error.message}\n`); }
+      finally { reportRunning = false; }
+    };
+    const heartbeat = setInterval(() => { void report(); }, 1800);
+    try {
+      if (action === 'verify') await engine.startVerification(remoteRun.id);
+      else if (action === 'repair') await engine.repair(remoteRun.id);
+      else throw new Error('The server assigned an unknown runner action.');
+    } catch (error) {
+      await store.update(remoteRun.id, (run) => {
+        run.state = action === 'repair' ? 'agent_error' : 'setup_error';
+        run.events.push({ at: new Date().toISOString(), type: action === 'repair' ? 'agent_error' : 'setup_error', message: error.message.slice(0, 1200) });
+      });
+    } finally {
+      clearInterval(heartbeat);
+      await report();
+    }
+    process.stdout.write(`Finished ${remoteRun.id}. Review the evidence in the PatchLoop page.\n`);
   } catch (error) {
-    process.stderr.write(`Runner connection issue: ${error.message}\n`);
-    if (active) active = false;
+    process.stderr.write(`Runner connection: ${error.message}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 5000));
   }
-  await new Promise((resolve) => setTimeout(resolve, active ? 1500 : 2200));
 }
-process.stdout.write('Local runner stopped.\n');
+
+process.stdout.write('Local runner stopped. The saved pairing will be available the next time it starts.\n');
+
+function globalCodexEntry() {
+  if (process.env.PATCHLOOP_CODEX_ENTRY) return path.resolve(process.env.PATCHLOOP_CODEX_ENTRY);
+  const npmGlobal = process.platform === 'win32'
+    ? path.join(process.env.APPDATA ?? path.join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'npm', 'node_modules')
+    : path.join(process.env.NPM_CONFIG_PREFIX ?? '/usr/local', 'lib', 'node_modules');
+  return path.join(npmGlobal, '@openai', 'codex', 'bin', 'codex.js');
+}
