@@ -10,7 +10,7 @@ PatchLoop is a local workbench for developers using coding agents who want brows
 
 PatchLoop checks a coding task against a fixed browser objective. This showcase objective tests a subtle restore bug: a completed task should keep its title and checked state after it is archived and restored.
 
-Here, I select PatchLoop Full Showcase as the target application. The runner and target are separate local repositories. To follow along, clone both repositories. Set PATCHLOOP_TARGET_REPO to the showcase checkout in the same terminal before starting the paired local worker. Sign in to Kane and Codex on that computer, pair the worker with PatchLoop, and leave it running.
+Here, I select PatchLoop Full Showcase as the target application. The paired runner executes Kane and Codex locally. To follow along, sign in to those tools on the runner computer, pair the worker with PatchLoop, and paste the showcase GitHub repository link into the run form. PatchLoop fetches the repository on that computer and keeps its source and worktrees local.
 
 Kane runs the saved browser objective. It creates the task, marks it complete, archives it, checks that it is in Archived, restores it, and checks that it returns to Active with the completed state intact. Watch the run move from Kane Running to Verified.
 

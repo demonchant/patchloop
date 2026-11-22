@@ -105,7 +105,7 @@ async function loadTargets() {
     availableTargets = targets.filter((target) => target.ready);
     const current = select.value;
     const nextOptions = availableTargets.length
-      ? availableTargets.map((target) => ({ id: target.id, name: target.name }))
+      ? availableTargets.map((target) => ({ id: target.id, name: `${target.name}${target.kind === 'github' && target.isPrivate ? ' · private' : ''}` }))
       : [{ id: '', name: 'Connect a runner to load repositories' }];
     const optionsUnchanged = select.options.length === nextOptions.length
       && nextOptions.every((target, index) => select.options[index].value === target.id && select.options[index].textContent === target.name);
@@ -134,7 +134,7 @@ async function loadPreflight() {
 }
 
 function eventLabel(event) {
-  return ({ created: 'Task submitted', worker_claimed: 'Local runner accepted task', verification_queued: 'Kane run queued', repair_queued: 'Repair queued', worker_lost: 'Local runner disconnected', worker_disconnected: 'Local runner disconnected', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Codex repair started', repair_finished: 'Codex repair completed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
+  return ({ created: 'Task submitted', worker_claimed: 'Local runner accepted task', verification_queued: 'Kane run queued', repair_queued: 'Repair queued', worker_lost: 'Local runner disconnected', worker_disconnected: 'Local runner disconnected', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Codex repair started', repair_finished: 'Codex repair completed', github_push_queued: 'GitHub push queued', github_push_started: 'GitHub branch push started', github_push_finished: 'GitHub branch pushed', github_push_failed: 'GitHub push failed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
 }
 
 function renderRun(run) {
@@ -144,13 +144,20 @@ function renderRun(run) {
   const repeatedFailure = lastTwo.length === 2 && lastTwo.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
   const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
   const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state);
+  const latestAgent = [...run.attempts].reverse().find((attempt) => attempt.kind === 'agent');
+  const canPush = run.targetUrl && run.state === 'verified' && run.repairCount > 0 && Boolean(run.lastDiff) && latest?.verdict === 'passed' && latestAgent?.exitCode === 0 && latestAgent.changed;
+  const pushUrl = run.targetUrl && run.pushBranch ? `${run.targetUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/tree/${run.pushBranch.split('/').map(encodeURIComponent).join('/')}` : '';
+  const pushAction = canPush ? (run.pushStatus === 'pushed'
+    ? `<a class="small-button" href="${escapeHtml(pushUrl)}" target="_blank" rel="noreferrer">Open pushed branch ↗</a>`
+    : `<button class="small-button" data-action="push" data-id="${run.id}" ${['queued', 'pushing'].includes(run.pushStatus) ? 'disabled' : ''}>${run.pushStatus === 'queued' ? 'Push queued' : (run.pushStatus === 'pushing' ? 'Pushing repair…' : (run.pushStatus === 'failed' ? 'Retry GitHub push ↗' : 'Push repair branch ↗'))}</button>`) : '';
   const action = `${canReplay ? `<button class="small-button" data-action="verify" data-id="${run.id}">${run.repairCount ? 'Run same Kane check ↻' : (repeatedFailure ? 'Replay again ↻' : 'Replay before repair ↻')}</button>` : ''}${canRepair ? `<button class="small-button danger" data-action="repair" data-id="${run.id}">Send repeated failure to Codex ↗</button>` : ''}`;
   const runDetails = `${run.attempts.length} recorded step${run.attempts.length === 1 ? '' : 's'}`;
   const latestText = latest ? `${latest.verdict}${latest.resultCode !== null ? ` · code ${latest.resultCode}` : ''}` : 'Waiting for Kane';
+  const targetText = run.targetName ? ` · ${run.targetName}` : '';
   return `<article class="run-card" data-run-card="${run.id}">
     <div class="run-main"><div class="run-status status-${escapeHtml(run.state)}"><i class="status-dot"></i>${escapeHtml(humanState(run.state))}</div>
-      <div class="run-copy"><div class="run-task">${escapeHtml(run.task)}</div><div class="run-meta"><span>${escapeHtml(stamp(run.createdAt))}</span><span>${escapeHtml(runDetails)}</span><span>${escapeHtml(latestText)}</span><span>objective ${escapeHtml(shortHash(run.objectiveHash))}</span></div></div>
-      <div class="run-actions">${action}<button class="small-button" data-action="details" data-id="${run.id}">Details</button></div></div>
+      <div class="run-copy"><div class="run-task">${escapeHtml(run.task)}</div><div class="run-meta"><span>${escapeHtml(stamp(run.createdAt))}${escapeHtml(targetText)}</span><span>${escapeHtml(runDetails)}</span><span>${escapeHtml(latestText)}</span><span>objective ${escapeHtml(shortHash(run.objectiveHash))}</span></div></div>
+      <div class="run-actions">${action}${pushAction}<button class="small-button" data-action="details" data-id="${run.id}">Details</button></div></div>
     <button class="run-expand" type="button" data-action="details" data-id="${run.id}">Open immutable objective and evidence ↓</button>
   </article>`;
 }
@@ -213,14 +220,21 @@ $('#copy-pair-command').addEventListener('click', async () => {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!form.reportValidity()) return;
+  const githubUrl = $('#target-github-url').value.trim();
+  const targetId = $('#target-repo').value;
+  if (Boolean(githubUrl) === Boolean(targetId)) {
+    showNotice(githubUrl ? 'Choose a listed repository or enter a GitHub link, not both.' : 'Choose a repository or paste a GitHub repository link.', true);
+    return;
+  }
   const button = $('#submit-run');
   button.disabled = true;
   notice.hidden = true;
   try {
-    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value, targetId: $('#target-repo').value }) });
+    const { run } = await api('/api/runs', { method: 'POST', body: JSON.stringify({ task: taskInput.value, objective: objectiveInput.value, targetId: githubUrl ? null : targetId, targetUrl: githubUrl || null }) });
     showNotice(activeSession?.mode === 'google' ? `Task ${run.id.slice(0, 8)} is queued for your local runner.` : `Task ${run.id.slice(0, 8)} created. Kane is starting a real browser run.`);
     taskInput.value = '';
     objectiveInput.value = '';
+    $('#target-github-url').value = '';
     counts();
     await loadRuns();
   } catch (error) { showNotice(error.message, true); }
@@ -232,7 +246,11 @@ async function showDetails(id) {
   const attempts = run.attempts.map((attempt) => `<section class="dialog-section"><div class="detail-label">${escapeHtml(attempt.kind.toUpperCase())} · ${escapeHtml(attempt.id)} · ${escapeHtml(attempt.verdict ?? (attempt.changed ? 'CHANGED FILES' : 'COMPLETE'))}</div><p>${escapeHtml(`Started ${stamp(attempt.startedAt)} · exit ${attempt.exitCode ?? 'unknown'}${attempt.resultCode !== undefined && attempt.resultCode !== null ? ` · result code ${attempt.resultCode}` : ''}${attempt.reasonCode ? ` · ${attempt.reasonCode}` : ''}${attempt.timedOut ? ' · timed out' : ''}`)}</p><pre>${escapeHtml(attempt.outputTail ?? attempt.finalEvent ?? 'No CLI output recorded.')}</pre></section>`).join('');
   const events = run.events.map((item) => `<p><span class="detail-label">${escapeHtml(stamp(item.at))} · ${escapeHtml(eventLabel(item))}</span><br>${escapeHtml(item.message)}</p>`).join('');
   const diff = run.lastDiff ? `<div class="detail-actions"><a class="small-button" href="/api/runs/${id}/diff" download="patchloop-${id}.patch">Download worktree diff</a></div>` : '<p>No code diff recorded.</p>';
-  $('#detail-body').innerHTML = `<section class="dialog-section"><div class="detail-label">REQUESTED CHANGE</div><p>${escapeHtml(run.task)}</p></section><section class="dialog-section"><div class="detail-label">FIXED OBJECTIVE · SHA-256 ${escapeHtml(run.objectiveHash)}</div><p class="objective-lock">⌑ ${escapeHtml(run.objective)}</p></section><section class="dialog-section"><div class="detail-label">WORKTREE DIFF · ${escapeHtml(run.diffStat || 'No changes')}</div>${diff}</section>${attempts}<section class="dialog-section"><div class="detail-label">TIMELINE</div>${events}</section>`;
+  const target = run.targetUrl ? `<section class="dialog-section"><div class="detail-label">GITHUB TARGET</div><p><a href="${escapeHtml(run.targetUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.targetName ?? run.targetUrl)}</a><br>Fetched by the local runner when verification starts.</p></section>` : '';
+  const pushUrl = run.targetUrl && run.pushBranch ? `${run.targetUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/tree/${run.pushBranch.split('/').map(encodeURIComponent).join('/')}` : '';
+  const pushed = run.pushStatus ? `<section class="dialog-section"><div class="detail-label">GITHUB PUSH · ${escapeHtml(run.pushStatus.toUpperCase())}</div><p>${run.pushStatus === 'pushed' ? `Branch <code>${escapeHtml(run.pushBranch)}</code> · commit <code>${escapeHtml(run.pushCommit)}</code><br><a href="${escapeHtml(pushUrl)}" target="_blank" rel="noreferrer">Open branch on GitHub</a>` : escapeHtml(run.pushError ?? (run.pushStatus === 'queued' || run.pushStatus === 'pushing' ? 'The reviewed branch is being pushed by your local runner.' : ''))}</p><p>The default branch is not changed or merged.</p></section>` : '';
+  $('#detail-body').innerHTML = `<section class="dialog-section"><div class="detail-label">REQUESTED CHANGE</div><p>${escapeHtml(run.task)}</p></section>${target}<section class="dialog-section"><div class="detail-label">FIXED OBJECTIVE · SHA-256 ${escapeHtml(run.objectiveHash)}</div><p class="objective-lock">⌑ ${escapeHtml(run.objective)}</p></section><section class="dialog-section"><div class="detail-label">WORKTREE DIFF · ${escapeHtml(run.diffStat || 'No changes')}</div>${diff}</section>${attempts}<section class="dialog-section"><div class="detail-label">TIMELINE</div>${events}</section>`;
+  if (pushed) $('#detail-body').insertAdjacentHTML('beforeend', pushed);
   detailDialog.showModal();
 }
 
@@ -251,6 +269,12 @@ runsElement.addEventListener('click', async (event) => {
     if (action === 'verify') {
       await api(`/api/runs/${id}/verify`, { method: 'POST' });
       showNotice(activeSession?.mode === 'google' ? 'The unchanged objective is queued for your local runner.' : 'Kane is rerunning the original objective against the repaired worktree.');
+      await loadRuns();
+    }
+    if (action === 'push') {
+      if (!confirm('Create a local commit and push the verified repair to a new patchloop/repair branch? This will not change or merge into the default branch.')) return;
+      await api(`/api/runs/${id}/push`, { method: 'POST' });
+      showNotice(activeSession?.mode === 'google' ? 'Push queued for your local runner. PatchLoop will report the branch result here.' : 'Pushing the verified repair to a new GitHub branch.');
       await loadRuns();
     }
   } catch (error) { showNotice(error.message, true); }

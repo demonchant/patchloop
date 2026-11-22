@@ -73,7 +73,7 @@ test('publishes the hosted runner prerequisites and setup steps', async ({ page 
   await expect(page.getByRole('heading', { name: 'Codex CLI' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Use the hosted PatchLoop page' })).toBeVisible();
   await expect(page.getByText(/pairing code expires after 10 minutes and works once/i)).toBeVisible();
-  await expect(page.getByRole('link', { name: /Local setup in the repository/ })).toHaveAttribute('href', 'https://github.com/demonchant/patchloop/tree/submission-ready#try-it-locally');
+  await expect(page.getByRole('link', { name: /Local setup in the repository/ })).toHaveAttribute('href', 'https://github.com/demonchant/patchloop/tree/main#try-it-locally');
 });
 test('loads a real bundled task prompt without creating fabricated run records', async ({ page }) => {
   test.setTimeout(45_000);

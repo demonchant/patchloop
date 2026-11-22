@@ -88,8 +88,11 @@ if (!preflight.kane.installed || !preflight.kane.authenticated || !preflight.age
   process.exit(2);
 }
 const targets = await engine.listTargets();
+const ghAuth = await runProcess('gh', ['auth', 'status'], { timeoutMs: 12_000, maxBytes: 20_000 });
+const githubCount = targets.filter((target) => target.kind === 'github').length;
 await request('/api/worker/targets', { method: 'POST', body: { targets } });
-process.stdout.write(`Local tools ready with ${targets.filter((target) => target.ready).length} repository target(s). Watching ${siteUrl.origin} for your private tasks. Press Ctrl+C to stop.\n`);
+const githubNotice = ghAuth.code === 0 ? ` GitHub repositories available: ${githubCount}.` : ' GitHub is not connected; run `gh auth login` on this computer, then restart the runner.';
+process.stdout.write(`Local tools ready with ${targets.filter((target) => target.ready).length} repository target(s).${githubNotice} Watching ${siteUrl.origin} for your private tasks. Press Ctrl+C to stop.\n`);
 
 let stopping = false;
 process.on('SIGINT', () => { stopping = true; });
@@ -120,6 +123,7 @@ while (!stopping) {
     try {
       if (action === 'verify') await engine.startVerification(remoteRun.id);
       else if (action === 'repair') await engine.repair(remoteRun.id);
+      else if (action === 'push') await engine.pushRepair(remoteRun.id);
       else throw new Error('The server assigned an unknown runner action.');
     } catch (error) {
       await store.update(remoteRun.id, (run) => {

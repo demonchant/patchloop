@@ -10,13 +10,13 @@ PatchLoop is the evidence and orchestration layer around two user-owned command 
 - **Codex CLI** can propose a code repair after a repeatable Kane failure.
 - **PatchLoop** records the task, fixed objective hash, attempts, outcomes, and diff; it decides verification from Kane's actual final result and exit status.
 
-PatchLoop does not claim a pass from an agent's explanation, an incomplete run, a timeout, or a launch error. A repair needs a human action, stays in an isolated Git worktree, and must pass the same saved objective on a fresh run. PatchLoop does not merge, commit, deploy, or submit the repair.
+PatchLoop does not claim a pass from an agent's explanation, an incomplete run, a timeout, or a launch error. A repair needs a human action, stays in an isolated Git worktree, and must pass the same saved objective on a fresh run. After that verified pass, a second explicit user action can commit the repair locally and push a new `patchloop/repair-<id>` branch. PatchLoop does not push to the default branch, merge, deploy, or submit the repair.
 
 ## How the service works
 
 There are two ways to use PatchLoop:
 
-1. **Hosted site with a local runner.** The website at [patchloop-web.onrender.com](https://patchloop-web.onrender.com) provides Google sign-in, a private account session, and a queue. A small worker on the user's computer polls that queue and runs Kane/Codex locally. Provider CLI credentials, target repository, and worktrees stay on that computer. Task text, progress, redacted evidence, and the reviewable diff are sent to the user's hosted session.
+1. **Hosted site with a local runner.** The website at [patchloop-web-f9wj.onrender.com](https://patchloop-web-f9wj.onrender.com) provides Google sign-in, a private account session, and a queue. A small worker on the user's computer polls that queue and runs Kane/Codex locally. Provider CLI credentials, target source, and worktrees stay on that computer. A GitHub URL, task text, progress, redacted evidence, and the reviewable diff are sent to the user's hosted session.
 2. **Integrated local workbench.** The user runs the web app on loopback and it invokes the locally installed CLIs directly. Run history and worktrees remain under the ignored `.patchloop/` directory on that computer.
 
 The hosted service does not provide Kane credits or Codex access. Every worker user must have working local Kane CLI access/credits and Codex CLI signed into their own ChatGPT account. The project owner pays Render hosting and storage. The runner must remain online while a task is being processed.
@@ -25,73 +25,74 @@ The hosted service does not provide Kane credits or Codex access. Every worker u
 
 ### One-time setup on the computer that will run tasks
 
-Requirements: Windows, macOS, or Linux with Node.js 20+, Git, Chrome, a network connection, a signed-in Google account, Kane CLI access/credits, and Codex CLI access through ChatGPT sign-in.
+Requirements: Windows, macOS, or Linux with Node.js 20+, Git, Chrome, a network connection, a signed-in Google account, Kane CLI access/credits, and Codex CLI access through ChatGPT sign-in. GitHub CLI is optional for direct links and required for the account repository picker and authenticated pushes.
 
-There are **two separate repositories** to clone on the local runner computer. PatchLoop's repository contains the app and worker. The target repository is the application you want PatchLoop to test or repair. For the showcase, clone the public showcase repository as a separate folder:
+Clone PatchLoop's repository onto the local runner computer. Target repositories can be selected from a connected GitHub CLI account, pasted as a GitHub link, or configured as a local checkout:
 
 ```powershell
 cd $HOME
-git clone --branch submission-ready https://github.com/demonchant/patchloop.git
-git clone https://github.com/demonchant/patchloop-full-showcase.git
+git clone --branch main https://github.com/demonchant/patchloop.git
 cd $HOME\patchloop
 npm ci
 npm install -g @testmuai/kane-cli @openai/codex
 kane-cli login --oauth
 codex login
 codex login status
+gh auth login
+gh auth setup-git
 ```
 
-For your own project, clone its GitHub repository to this computer too, then use that local checkout as the target. Review its code and `patchloop.target.json` first: PatchLoop runs its target manifest commands locally. The target must have a committed Git baseline. Commit or stash work you want included; PatchLoop creates an isolated worktree from the committed `HEAD`, not from uncommitted files. These CLI logins happen locally. Do not paste provider passwords, tokens, pairing codes, or auth files into the website, repository, video, or Render settings.
+GitHub CLI is optional if you use the direct link field for a public repository. Its sign-in lets PatchLoop list up to 100 repositories from the authenticated-user repositories API, including owner, collaborator, and organization-member repositories. `gh auth setup-git` configures Git's credential helper for private clones and pushes. Review each target's code and `patchloop.target.json` first: PatchLoop runs target manifest commands locally. A GitHub run fetches the latest default-branch commit when verification starts, then creates an isolated worktree from that commit. These CLI logins happen locally. Do not paste provider passwords, tokens, pairing codes, or auth files into the website, repository, video, or Render settings.
 
 ### Pair the local runner and register the target
 
-1. Open [https://patchloop-web.onrender.com](https://patchloop-web.onrender.com) and sign in with Google.
+1. Open [https://patchloop-web-f9wj.onrender.com](https://patchloop-web-f9wj.onrender.com) and sign in with Google.
 2. Choose **Connect local runner**. Keep the one-time command displayed by the site private; it expires after ten minutes and works once.
-3. In PowerShell, set the target path and check it **before starting the worker**. Keep the target path and runner checkout separate:
+3. In PowerShell, change to the PatchLoop checkout. If using a manually cloned local target instead of a GitHub link or repository picker, set `PATCHLOOP_TARGET_REPO` in this same terminal:
 
    ```powershell
    cd $HOME\patchloop
-   $target = Join-Path $HOME 'patchloop-full-showcase'
-   Test-Path (Join-Path $target 'patchloop.target.json')
-   $env:PATCHLOOP_TARGET_REPO = (Resolve-Path $target).Path
+   # Optional local target only; GitHub link/picker users can omit this.
+   $env:PATCHLOOP_TARGET_REPO = 'C:\path\to\your\target-checkout'
    ```
 
-   `Test-Path` should return `True`. For a different app, replace the showcase folder with that app's local checkout path.
+   The local target path is optional when selecting from GitHub or entering a GitHub link. Keep it set only when intentionally using a local checkout.
 
 4. Run the first-time pairing command copied from PatchLoop, in this same terminal:
 
    ```powershell
-   npm run worker -- --url https://patchloop-web.onrender.com --pair-code <ONE_TIME_CODE_FROM_PATCHLOOP>
+   npm run worker -- --url https://patchloop-web-f9wj.onrender.com --pair-code <ONE_TIME_CODE_FROM_PATCHLOOP>
    ```
 
-   The worker saves a revocable local token under the ignored `.patchloop/remote-worker/` folder. It should print the number of ready repository targets; with the bundled target and showcase configured, expect **2 repository targets**. If the count is 1, stop and check the target path and manifest before creating a task.
+   The worker saves a revocable local token under the ignored `.patchloop/remote-worker/` folder. It prints the number of ready repository targets and GitHub repositories it can list. If GitHub is connected but its count is zero, check the GitHub CLI account and repository visibility.
 
-5. Leave the worker terminal open. Confirm the website says the runner is connected, refresh the page, and choose **PatchLoop Full Showcase** in **Target repository**. Pairing and target registration are separate: a connected runner does not mean the showcase path was registered.
+5. Leave the worker terminal open. Confirm the website says the runner is connected, refresh the page, and choose **PatchLoop Full Showcase** or another listed repository in **Target repository**. A direct GitHub repository link can also be pasted into the run form. Pairing and GitHub sign-in are separate; a connected runner does not imply GitHub is connected.
 6. Create the requested code change and browser objective. The task describes what the agent should change. The acceptance objective must state the observable browser behavior Kane will check. For the showcase, copy the task and fixed objective from its README.
 7. Submit the task, monitor the timeline, then open **Details** to inspect the fixed objective hash, Kane evidence, final event, exit code, and diff. A setup error means the runner or target configuration needs attention; it is not a Kane failure and should not be sent to Codex.
 8. After two consecutive failures of the same objective, inspect the evidence and explicitly request a Codex repair if appropriate. Review the actual worktree diff, then run the unchanged objective with Kane again. Claim a successful repair only when a real diff exists and the final same-objective Kane run passes with a successful process exit.
+9. For a verified repair on a GitHub target, review the diff and select **Push repair branch** only when you want to publish it. PatchLoop asks for confirmation, commits locally, and pushes a non-force `patchloop/repair-<id>` branch. Git author name/email and GitHub write access must be configured on the runner. The default branch is not changed; opening or merging a pull request is a separate GitHub action.
 
-For future worker starts, set `PATCHLOOP_TARGET_REPO` again in each new terminal, then omit the already-used pairing code:
+For future worker starts, set `PATCHLOOP_TARGET_REPO` again in each new terminal only if you use a local checkout, then omit the already-used pairing code:
 
 ```powershell
 cd $HOME\patchloop
-$target = Join-Path $HOME 'patchloop-full-showcase'
-$env:PATCHLOOP_TARGET_REPO = (Resolve-Path $target).Path
-npm run worker -- --url https://patchloop-web.onrender.com
+# Optional only for an already-cloned local target:
+# $env:PATCHLOOP_TARGET_REPO = 'C:\path\to\your\target-checkout'
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com
 ```
 
-To disconnect and revoke this worker pairing, run `npm run worker -- --url https://patchloop-web.onrender.com --disconnect` from the PatchLoop checkout. If a target is absent, restart the worker after correcting the path or manifest. Existing run records keep their original target and objective; replay only after the worker reports the intended target.
+To disconnect and revoke this worker pairing, run `npm run worker -- --url https://patchloop-web-f9wj.onrender.com --disconnect` from the PatchLoop checkout. If a configured local target is absent, restart the worker after correcting its path or manifest. Existing run records keep their original target and objective.
 
 Pairing codes expire after 10 minutes and can be used once. Never publish a code in a README, screenshot, issue, or commit. The worker saves a revocable local token under `.patchloop/remote-worker/`, which is ignored by Git. After first pairing, restart it with:
 
 ```powershell
-npm run worker -- --url https://patchloop-web.onrender.com
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com
 ```
 
 To stop and revoke the local worker pairing:
 
 ```powershell
-npm run worker -- --url https://patchloop-web.onrender.com --disconnect
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com --disconnect
 ```
 
 If the worker terminal closes, the computer sleeps, or the network drops, queued work waits until the worker reconnects. A user's history and runner are scoped to their Google account; do not assume hosted multi-account isolation is independently proven until the documented live account-separation check has been recorded.

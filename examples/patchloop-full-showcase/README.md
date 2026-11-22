@@ -16,14 +16,14 @@ Clone this repository on the computer running the paired local worker. Then star
 
 ```powershell
 $env:PATCHLOOP_TARGET_REPO = 'C:\path\to\patchloop-full-showcase'
-npm run worker -- --url https://patchloop-web.onrender.com
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com
 ```
 
 ### macOS / Linux
 
 ```sh
 export PATCHLOOP_TARGET_REPO="$HOME/src/patchloop-full-showcase"
-npm run worker -- --url https://patchloop-web.onrender.com
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com
 ```
 
 The site will list **PatchLoop Full Showcase** in the target repository picker. Select it before submitting the task. The worker uses this committed baseline to create an isolated Git worktree. It never edits the checkout you selected.

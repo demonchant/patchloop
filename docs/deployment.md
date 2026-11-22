@@ -15,15 +15,15 @@ To use another local target, set `PATCHLOOP_TARGET_REPO` to a committed Git repo
 
 ## Hosted link with a local runner
 
-**Live service:** [https://patchloop-web.onrender.com](https://patchloop-web.onrender.com). The maintainer reports Google sign-in is now working. This checkout could not reach Render during this documentation update, so this is not an independent uptime or hosted end-to-end verification result.
+**Live service:** [https://patchloop-web-f9wj.onrender.com](https://patchloop-web-f9wj.onrender.com). The maintainer reports Google sign-in is now working. This checkout could not reach Render during this documentation update, so this is not an independent uptime or hosted end-to-end verification result.
 
 The hosted service provides Google sign-in, private run history, and a task queue. A paired local runner performs the real Kane and Codex work on the user's computer. Google credentials stay in the web session; Kane/Codex login profiles, target code, and worktrees stay on that computer and the CLI authentication stores are not uploaded. The hosted service receives task details, progress, pattern-redacted CLI evidence, and the reviewable diff so it can show run status and evidence. Avoid putting secrets in task text or code changes.
 
-Each user needs Node.js 20+, Git, Chrome, Kane CLI access and credits, and Codex CLI signed into their own ChatGPT account. No OpenAI API key or hosted ChatGPT sign-in is needed. The runner must remain open to pick up tasks. The project owner pays the Render hosting bill; each user consumes their own provider account allowance.
+Each user needs Node.js 20+, Git, Chrome, Kane CLI access and credits, and Codex CLI signed into their own ChatGPT account. Install GitHub CLI and run `gh auth login` plus `gh auth setup-git` to connect an account, populate the repository picker, access private repositories, and push repair branches. Direct public GitHub links do not require GitHub CLI sign-in. No OpenAI API key or hosted ChatGPT sign-in is needed. The runner must remain open to pick up tasks. The project owner pays the Render hosting bill; each user consumes their own provider account allowance.
 
 ### 1. Push the repository and create a Render Blueprint
 
-Push the code to `https://github.com/demonchant/patchloop` on the `submission-ready` branch. In Render, choose **New → Blueprint**, connect that GitHub repository and branch, and review `render.yaml`. The blueprint defines the Node web service, health check, persistent data disk, Google login, and worker-queue mode. Create the service when ready. Google login is deliberately left pending until you add your OAuth client after Render assigns the public URL. The current Blueprint selects a paid Starter instance and a 1 GB persistent disk; review the current amount in the Render dashboard before confirming.
+Push the code to `https://github.com/demonchant/patchloop` on the `main` branch. In Render, choose **New → Blueprint**, connect that GitHub repository and branch, and review `render.yaml`. The blueprint defines the Node web service, health check, persistent data disk, Google login, and worker-queue mode. Create the service when ready. Google login is deliberately left pending until you add your OAuth client after Render assigns the public URL. The current Blueprint selects a paid Starter instance and a 1 GB persistent disk; review the current amount in the Render dashboard before confirming.
 
 Render web services receive a public `onrender.com` subdomain and must listen on `0.0.0.0` and the assigned `PORT`; this project already does both in hosted mode. PatchLoop reads Render's `RENDER_EXTERNAL_URL` automatically, so you do not need to guess or paste the site URL into an environment variable. See [Render web services](https://render.com/docs/web-services) and [Render's first deploy guide](https://render.com/docs/your-first-deploy).
 
@@ -33,8 +33,8 @@ In [Google Cloud Console](https://console.cloud.google.com/), create or select a
 
 After Render shows the URL, use that exact origin in both places below (replace the sample hostname):
 
-- Authorized JavaScript origin: `https://patchloop-web.onrender.com`
-- Authorized redirect URI: `https://patchloop-web.onrender.com/auth/google/callback`
+- Authorized JavaScript origin: `https://patchloop-web-f9wj.onrender.com`
+- Authorized redirect URI: `https://patchloop-web-f9wj.onrender.com/auth/google/callback`
 
 The OAuth app only requests `openid`, `email`, and `profile`. It uses Google to identify and scope a PatchLoop session; it does not authorize Kane or Codex.
 
@@ -52,10 +52,10 @@ Save the environment and deploy/redeploy. Check `https://YOUR-SERVICE.onrender.c
 
 ### 4. Pair each user's local runner
 
-Each user performs these steps on the computer where Kane and Codex should run. Do not put CLI auth files or credentials in the repository or Render environment. To register an additional app, clone it on that computer, review its `patchloop.target.json`, and set `PATCHLOOP_TARGET_REPO` in the worker terminal before starting the worker. The site lists the worker's ready repositories in the picker; restart the worker after changing the configured repository. See the [showcase target setup](target-repositories.md#showcase-target) for a sample.
+Each user performs these steps on the computer where Kane and Codex should run. Do not put CLI auth files or credentials in the repository or Render environment. To register an additional app, either configure a local checkout with `PATCHLOOP_TARGET_REPO` or paste a GitHub repository root link into the run form. The worker fetches GitHub repositories locally and runs them in isolated worktrees; see the [target repository guide](target-repositories.md#use-a-github-link).
 
 ```powershell
-git clone --branch submission-ready https://github.com/demonchant/patchloop.git
+git clone --branch main https://github.com/demonchant/patchloop.git
 cd patchloop
 npm ci
 npm install -g @testmuai/kane-cli @openai/codex
@@ -64,10 +64,10 @@ codex login
 codex login status
 ```
 
-Then open the Render site, sign into Google, and select **Connect local runner**. Run the one-time pairing command shown by the page in the checkout terminal. That code expires after 10 minutes and can be used once. The command saves a revocable runner token under the ignored `.patchloop/remote-worker/` directory. Keep the process running. On later starts, use:
+Then open [the PatchLoop site](https://patchloop-web-f9wj.onrender.com), sign into Google, and select **Connect local runner**. Run the one-time pairing command shown by the page in the checkout terminal. That code expires after 10 minutes and can be used once. The command saves a revocable runner token under the ignored `.patchloop/remote-worker/` directory. Keep the process running. On later starts, use:
 
 ```powershell
-npm run worker -- --url https://YOUR-SERVICE.onrender.com
+npm run worker -- --url https://patchloop-web-f9wj.onrender.com
 ```
 
 The first pairing command includes `--pair-code CODE`. Do not share it. To disconnect and revoke the saved runner token:
@@ -77,6 +77,8 @@ npm run worker -- --url https://YOUR-SERVICE.onrender.com --disconnect
 ```
 
 The helper checks that Kane is authenticated and Codex CLI has a non-API-key login, then runs the same local Engine used by the integrated workbench. It persists the local target, worktrees, and provider CLI profiles on that computer. The Render side stores only a hash of the runner token. Re-pairing replaces that user's prior token. If the runner is offline, new jobs stay queued.
+
+After a verified repair on a GitHub target, the UI offers **Push repair branch**. The user confirms the action; the runner commits with the configured local Git author and performs a normal push to a new `patchloop/repair-<id>` branch. GitHub credentials stay on the runner. PatchLoop does not force-push, alter the default branch, or merge the branch.
 
 ### 5. Verify and operate the service
 
