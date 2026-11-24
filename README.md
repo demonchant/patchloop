@@ -160,6 +160,7 @@ The official page lists a November 26, 2026, 11:59 PM IST deadline and requires 
 - [Demo and operations guide](docs/demo-and-operations.md)
 - [Verification record](docs/verification.md)
 - [Submission notes](docs/submission.md)
+- [Render setup and screen recording script](docs/render-and-recording.md)
 
 ## Multi-agent support and PatchLoop showcase
 

@@ -19,3 +19,8 @@
 .DS_Store
 Thumbs.db
 docs/submission-copy.md
+
+# Private handoff material and the separately maintained showcase target stay local.
+/HANDOFF.md
+/private-docs/
+/examples/patchloop-full-showcase2/

@@ -23,9 +23,11 @@ if (!['disabled', 'local', 'worker'].includes(EXECUTION_MODE)) throw new Error('
 if (HOSTED && EXECUTION_MODE === 'local') throw new Error('Google hosted mode cannot run local task execution on the web service.');
 if (!HOSTED && EXECUTION_MODE === 'worker') throw new Error('Worker queue mode requires Google hosted authentication.');
 const EXECUTION_ENABLED = EXECUTION_MODE !== 'disabled';
-const auth = HOSTED && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && PUBLIC_URL && process.env.PATCHLOOP_SESSION_SECRET ? createGoogleAuth({
-  clientId: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.PATCHLOOP_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || process.env.PATCHLOOP_GOOGLE_CLIENT_SECRET;
+const auth = HOSTED && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && PUBLIC_URL && process.env.PATCHLOOP_SESSION_SECRET ? createGoogleAuth({
+  clientId: GOOGLE_CLIENT_ID,
+  clientSecret: GOOGLE_CLIENT_SECRET,
   publicUrl: PUBLIC_URL,
   sessionSecret: process.env.PATCHLOOP_SESSION_SECRET,
 }) : null;
