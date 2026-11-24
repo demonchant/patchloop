@@ -23,7 +23,7 @@
           <h1 id="sign-in-title">Your verification history,<br><em>kept yours.</em></h1>
           <p>Sign in with Google to open your private PatchLoop session. Your account is used for sign-in and workspace ownership only.</p>
           <a class="primary-button google-sign-in" href="/auth/google">Continue with Google <span aria-hidden="true">→</span></a>
-          <a class="setup-link sign-in-setup-link" href="/setup.html">What you need to run Kane and Codex →</a>
+          <a class="setup-link sign-in-setup-link" href="/setup.html">What you need to run Kane and a coding agent →</a>
           <p class="sign-in-error" id="sign-in-error" role="status" hidden></p>
         </section>
       </main>
@@ -51,9 +51,12 @@
               <label for="target-github-url">Or use a GitHub repository link</label>
               <input id="target-github-url" name="targetGithubUrl" type="url" maxlength="300" autocomplete="url" placeholder="https://github.com/owner/repository">
               <div class="field-foot target-help"><span>Use the repository root link. The paired runner clones it locally; private repos need GitHub access on that computer.</span></div>
+              <label for="agent-id">Coding agent</label>
+              <select id="agent-id" name="agentId" required><option value="codex">Codex · checking local tools…</option></select>
+              <div class="field-foot target-help"><span id="agent-help">The selected local agent proposes a repair after repeatable Kane failures. Kane always verifies it independently.</span></div>
               <label for="task">What should the coding agent change?</label>
               <textarea id="task" name="task" rows="4" minlength="12" maxlength="1600" required placeholder="Example: Add archive and restore actions for completed tasks. Keep archived tasks out of the active list and preserve their completion state when restored."></textarea>
-              <div class="field-foot"><span>Kane checks first; Codex gets two matching failures after your approval.</span><span id="task-count">0 / 1600</span></div>
+              <div class="field-foot"><span>Kane checks first; your selected agent gets two matching failures after your approval.</span><span id="task-count">0 / 1600</span></div>
               <label for="objective" class="objective-label">Fixed Kane acceptance objective <span class="lock-label">⌑ LOCKED AFTER START</span></label>
               <textarea id="objective" name="objective" rows="4" minlength="16" maxlength="1800" required placeholder="Example: Create a task, complete it, archive it, confirm it appears only in Archived, restore it, and confirm it returns completed."></textarea>
               <div class="field-foot"><span>SHA-256 recorded at submission; agent cannot edit it.</span><span id="objective-count">0 / 1800</span></div>
@@ -70,7 +73,7 @@
               <div class="privacy-note"><span class="shield">◈</span><span>Prompts, run history, and worktrees stay on this machine. CLI auth is never shown here.</span></div>
             </section>
             <div id="worker-connect" class="worker-connect" hidden>
-              <p class="worker-state" id="worker-state">Pair a local runner to use your own Kane and Codex sign-ins.</p>
+              <p class="worker-state" id="worker-state">Pair a local runner to use your Kane and selected coding-agent sign-ins.</p>
               <button class="small-button" id="pair-worker" type="button">Connect local runner</button>
               <p class="pair-expiry" id="pair-expiry" role="status" aria-live="polite" hidden></p>
               <pre id="pair-command" class="pair-command" hidden></pre>
@@ -92,6 +95,6 @@
 
       <footer><span>PATCHLOOP <b>·</b> LOCAL-FIRST AGENT QA</span><span>Kane CLI is the verifier. Only observed runs earn a green state.</span></footer>
     </div>
-    <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"><div class="dialog-head"><div><div class="eyebrow small">RUN RECORD</div><h2 id="detail-title">Run details</h2></div><button class="icon-button" id="close-dialog" aria-label="Close details">×</button></div><div id="detail-body"></div></dialog>
+    <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title"><div class="dialog-head"><div><div class="eyebrow small">LIVE RUN RECORD</div><h2 id="detail-title">Run details</h2><span id="detail-refresh-state" class="detail-refresh-state" aria-live="polite">Updates while this panel is open</span></div><button class="icon-button close-dialog-button" id="close-dialog" type="button" aria-label="Close details" title="Close details">×</button></div><div id="detail-body" aria-live="polite"></div></dialog>
   </body>
 </html>

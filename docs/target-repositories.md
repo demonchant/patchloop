@@ -57,7 +57,7 @@ Restart the local app or paired worker. The target picker shows up to 100 reposi
 
 The GitHub link is attached to each run, so it can be reviewed later. Retrying a run uses that saved repository URL. The runner refreshes its cached clone when a new verification starts; an existing repair worktree remains based on its original commit.
 
-After a Codex repair passes the unchanged Kane objective, **Push repair branch** can create a local commit and push it to a new `patchloop/repair-<run-id>` branch. PatchLoop checks that the displayed worktree diff still matches the repair, asks for confirmation, and uses a normal non-force Git push. It never pushes this repair to the default branch or merges it. The branch link and commit are recorded in the run history. GitHub branch protection, missing write access, or missing local Git author configuration can block the push; the repair remains in the local worktree for review.
+After the selected agent's repair passes the unchanged Kane objective, **Push repair branch** can create a local commit and push it to a new `patchloop/repair-<run-id>` branch. PatchLoop checks that the displayed worktree diff still matches the repair, asks for confirmation, and uses a normal non-force Git push. It never pushes this repair to the default branch or merges it. The branch link and commit are recorded in the run history. GitHub branch protection, missing write access, or missing local Git author configuration can block the push; the repair remains in the local worktree for review.
 
 ## Configure and choose a repository
 

@@ -20,18 +20,18 @@
         <section class="setup-intro">
           <div class="eyebrow"><span class="eyebrow-line"></span> RUN PATCHLOOP FROM A LINK</div>
           <h1>Sign in on the site.<br><em>Run tools on your computer.</em></h1>
-          <p>Google keeps your hosted PatchLoop session and run history private. A small local runner uses the Kane and Codex CLI sign-ins on your computer and never uploads their local authentication stores.</p>
+          <p>Google keeps your hosted PatchLoop session and run history private. A small local runner uses Kane CLI and your selected coding agent on your computer and never uploads their local authentication stores.</p>
         </section>
 
         <section class="hosted-notice" role="status">
-          The Render site queues tasks and stores private run records. The local runner performs Kane browser checks and Codex repairs on your computer. Keep the runner open while you want tasks to run.
+          The hosted site queues tasks and stores private run records. The local runner performs Kane browser checks and selected-agent repairs on your computer. Keep the runner open while you want tasks to run.
         </section>
 
         <section class="setup-grid" aria-label="What you need to use PatchLoop">
           <article class="panel setup-step">
             <div class="eyebrow small">01 · PATCHLOOP ACCOUNT</div>
             <h2>Sign in with Google</h2>
-            <p>Google identifies your private PatchLoop session. It does not sign you into Kane or Codex. Run records are scoped to the Google account that created them.</p>
+            <p>Google identifies your private PatchLoop session. It does not sign you into Kane or a coding agent. Run records are scoped to the Google account that created them.</p>
             <span class="setup-status">No provider credential form</span>
           </article>
 
@@ -46,12 +46,14 @@ kane-cli login --oauth</pre>
 
           <article class="panel setup-step">
             <div class="eyebrow small">03 · CODE REPAIR</div>
-            <h2>Codex CLI</h2>
-            <p>Install Codex CLI and sign in locally with your ChatGPT account. PatchLoop runs the CLI on your computer. No OpenAI API key, ChatGPT password, or browser session token is entered into PatchLoop.</p>
-            <pre>npm install -g @openai/codex
-codex login
-codex login status</pre>
-            <a class="setup-doc-link" href="https://developers.openai.com/codex/auth" rel="noreferrer">OpenAI Docs: Codex authentication →</a>
+            <h2>Coding agents</h2>
+            <p>Choose a locally installed Codex, Claude Code, Cursor CLI, GitHub Copilot CLI, or Kiro CLI. Windsurf and other IDE agents can connect through PatchLoop's local MCP bridge. Install and sign in using the provider's own setup; PatchLoop does not collect provider passwords or tokens.</p>
+            <pre>Codex: npm install -g @openai/codex
+Claude Code: claude auth status
+Cursor: agent status
+Copilot: copilot login
+Kiro: kiro-cli</pre>
+            <a class="setup-doc-link" href="https://github.com/demonchant/patchloop/tree/feature/multi-agent-details-live/docs/demo-and-operations.md#multi-agent-repair-operations" rel="noreferrer">Provider and MCP setup guide →</a>
           </article>
         </section>
 
@@ -70,7 +72,7 @@ codex login status</pre>
 cd patchloop
 npm ci</pre>
           <p>The pairing code expires after 10 minutes and works once. After pairing, start the runner on later days with the command shown on the page without the pairing code. Its runner token stays in the ignored <code>.patchloop/remote-worker/</code> folder on that computer. To revoke the paired runner, run <code>npm run worker -- --url YOUR_PATCHLOOP_URL --disconnect</code>.</p>
-          <p>Your Kane, Codex, and GitHub CLI sign-ins, target source, and worktrees remain local. PatchLoop sends repository metadata and links, task text, progress, pattern-redacted CLI evidence, and the reviewable diff to your private Google-owned session so the website can display the run. A verified repair can be pushed, with your confirmation, to a new branch without changing the default branch.</p>
+          <p>Your Kane, coding-agent, and GitHub CLI sign-ins, target source, and worktrees remain local. PatchLoop sends repository metadata and links, task text, progress, pattern-redacted CLI evidence, and the reviewable diff to your private Google-owned session so the website can display the run. A verified repair can be pushed, with your confirmation, to a new branch without changing the default branch.</p>
           <p>Running your own full local workbench is also supported: use <code>npm start</code> and open <code>http://127.0.0.1:4173</code>. See the repository README for the local workflow and optional target repository setup.</p>
           <div class="setup-links">
             <a class="setup-doc-link" href="https://github.com/demonchant/patchloop/tree/main#try-it-locally" rel="noreferrer">Local setup in the repository →</a>

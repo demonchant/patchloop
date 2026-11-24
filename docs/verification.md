@@ -2,6 +2,12 @@
 
 This file records commands and browser verification performed against the bundled PatchLoop demo app.
 
+## Multi-agent and live-details validation (2026-11-24)
+
+The current implementation passed syntax validation, all 16 Node tests, and all 12 Playwright browser tests on Windows with Node.js 24.18.0 and npm 11.16.0. The browser run used isolated ports 4588/4580. Full output and the HTML report are retained in [`verification-results/`](../verification-results/README.md).
+
+The added coverage includes fixed provider invocation policies, provider capability allowlisting and redaction, immutable provider selection in worker reports, a local fake Codex executable, the real PatchLoop MCP stdio server and run-bound handoff, hosted agent selection, unregistered-agent rejection, live Details updates, and bundled Goodwork archive/restore behavior.
+
 ## Commands
 
 | Command | Result | Scope / limitation |

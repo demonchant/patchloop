@@ -1,0 +1,33 @@
+
+> patchloop@1.0.0 test:e2e
+> playwright test
+
+node.exe : [WebServer] (node:51724) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([WebServer] (no... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:54608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 12 tests using 1 worker
+
+(node:53304) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e\workbench.spec.mjs:6:1 › loads the workbench and reports real local tool readiness (6.0s)
+  ✓   2 e2e\workbench.spec.mjs:20:1 › keeps hosted sign-in active, refreshes expired pairing codes, and detects a paired runner without reload (2.7s)
+  ✓   3 e2e\workbench.spec.mjs:47:1 › serves the supplied backgrounds and assigns one to each screen (3.2s)
+  ✓   4 e2e\workbench.spec.mjs:66:1 › publishes the hosted runner prerequisites and setup steps (2.1s)
+  ✓   5 e2e\workbench.spec.mjs:78:1 › loads a real bundled task prompt without creating fabricated run records (1.6s)
+  ✓   6 e2e\workbench.spec.mjs:88:1 › shows reported repository choices and submits the selected target id (2.8s)
+  ✓   7 e2e\workbench.spec.mjs:123:1 › keeps Details live while open and closes it with the visible X control (4.6s)
+  ✓   8 e2e\workbench.spec.mjs:162:1 › keeps all primary controls keyboard reachable and usable on a narrow viewport (1.3s)
+  ✓   9 e2e\workbench.spec.mjs:176:1 › exposes health and refuses incomplete task submissions without starting tools (131ms)
+  ✓  10 e2e\workbench.spec.mjs:194:1 › publishes the bundled target and rejects an unavailable repository selection (4.2s)
+  ✓  11 e2e\workbench.spec.mjs:207:1 › adds safe response headers and blocks cross-origin state changes (20ms)
+  ✓  12 e2e\workbench.spec.mjs:217:1 › archives a completed task and restores it to Active with its checkmark (719ms)
+
+  12 passed (32.4s)

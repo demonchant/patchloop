@@ -39,7 +39,7 @@ test('keeps hosted sign-in active, refreshes expired pairing codes, and detects 
   await expect(page.locator('#pair-command')).toContainText('demo-pair-code-2');
   runnerConnected = true;
   await page.getByRole('button', { name: /^Check/ }).click();
-  await expect(page.locator('#worker-state')).toContainText('You can give PatchLoop a task now');
+  await expect(page.locator('#worker-state')).toContainText('Choose a ready coding agent for repairs');
   await expect(page.locator('#pair-command')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Refresh pairing code' })).toBeHidden();
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalPageTime);
@@ -70,7 +70,7 @@ test('publishes the hosted runner prerequisites and setup steps', async ({ page 
   await expect(page.locator('.setup-intro h1')).toContainText('Run tools on your computer.');
   await expect(page.getByRole('heading', { name: 'Sign in with Google' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Kane CLI' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Codex CLI' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Coding agents' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Use the hosted PatchLoop page' })).toBeVisible();
   await expect(page.getByText(/pairing code expires after 10 minutes and works once/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /Local setup in the repository/ })).toHaveAttribute('href', 'https://github.com/demonchant/patchloop/tree/main#try-it-locally');
@@ -88,7 +88,10 @@ test('loads a real bundled task prompt without creating fabricated run records',
 test('shows reported repository choices and submits the selected target id', async ({ page }) => {
   const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/session', (route) => route.fulfill(json({ mode: 'google', authenticated: true, executionEnabled: true, user: { name: 'Demo User' } })));
-  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: false } })));
+  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: false, agents: [
+    { id: 'codex', name: 'Codex', supported: true, installed: false, authenticated: false, ready: false },
+    { id: 'cursor', name: 'Cursor CLI', supported: true, installed: true, authenticated: true, ready: true },
+  ] } })));
   await page.route('**/api/targets', (route) => route.fulfill(json({ targets: [
     { id: 'bundled-demo', name: 'Bundled Goodwork demo', ready: true },
     { id: 'configured', name: 'PatchLoop Full Showcase', ready: true, requirements: 'Node.js 20+ and committed Git checkout.' },
@@ -97,6 +100,7 @@ test('shows reported repository choices and submits the selected target id', asy
     if (route.request().method() === 'POST') {
       const payload = route.request().postDataJSON();
       expect(payload.targetId).toBe('configured');
+      expect(payload.agentId).toBe('cursor');
       await route.fulfill(json({ run: { id: 'demo-run-id', ...payload } }));
       return;
     }
@@ -109,10 +113,50 @@ test('shows reported repository choices and submits the selected target id', asy
   await expect(picker.locator('option')).toHaveCount(2);
   await picker.selectOption('configured');
   await expect(page.locator('#target-requirements')).toHaveText('Node.js 20+ and committed Git checkout.');
+  await page.getByLabel('Coding agent', { exact: true }).selectOption('cursor');
   await page.getByLabel('What should the coding agent change?').fill('Keep a completed task checked after restore.');
   await page.getByLabel(/Fixed Kane acceptance objective/).fill('Create, complete, archive, and restore a task, then confirm its title and completed checkbox are preserved.');
   await page.getByRole('button', { name: 'Run Kane verification' }).click();
   await expect(page.getByText(/is queued for your local runner/)).toBeVisible();
+});
+
+test('keeps Details live while open and closes it with the visible X control', async ({ page }) => {
+  test.setTimeout(15_000);
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const record = {
+    id: 'live-detail-run', task: 'Preserve the completed state after restore.', objective: 'Restore the task with its title and completed checkmark.',
+    objectiveHash: 'fixed-objective-hash', targetName: 'Bundled Goodwork demo', agentId: 'cursor', state: 'repairing', repairCount: 0,
+    attempts: [{ id: 'kane-1', kind: 'kane', verdict: 'failed', objectiveHash: 'fixed-objective-hash', exitCode: 1, outputTail: 'The restored task is unchecked.', startedAt: new Date().toISOString() }],
+    events: [{ type: 'repair_started', at: new Date().toISOString(), message: 'Cursor CLI started the isolated repair.' }],
+  };
+  let latest = structuredClone(record);
+  await page.route('**/api/session', (route) => route.fulfill(json({ mode: 'google', authenticated: true, executionEnabled: true, user: { name: 'Demo User' } })));
+  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: true, agents: [
+    { id: 'cursor', name: 'Cursor CLI', supported: true, installed: true, authenticated: true, ready: true },
+  ] } })));
+  await page.route('**/api/targets', (route) => route.fulfill(json({ targets: [{ id: 'bundled-demo', name: 'Bundled Goodwork demo', ready: true }] })));
+  await page.route('**/api/runs/live-detail-run', (route) => route.fulfill(json({ run: latest })));
+  await page.route('**/api/runs', (route) => route.fulfill(json({ runs: [latest] })));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Details' }).click();
+  await expect(page.locator('#detail-body')).toContainText('Cursor CLI started the isolated repair.');
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('test-update-details'));
+  });
+  latest = {
+    ...record,
+    state: 'unresolved',
+    repairCount: 1,
+    lastDiff: 'diff --git a/tasks.js b/tasks.js\n+completed: true',
+    diffStat: 'tasks.js | 1 +',
+    attempts: [...record.attempts, { id: 'agent-1', kind: 'agent', providerId: 'cursor', providerVersion: 'Cursor CLI 1.0', changed: true, exitCode: 0, outputTail: 'Updated archive restore state.' }],
+    events: [...record.events, { type: 'repair_finished', at: new Date().toISOString(), message: 'Cursor CLI changed files. The same objective is ready to rerun.' }],
+  };
+  await expect(page.locator('#detail-body')).toContainText('Updated archive restore state.', { timeout: 7_000 });
+  await expect(page.locator('#detail-body')).toContainText('Cursor CLI');
+  await expect(page.locator('#detail-refresh-state')).toContainText('live while open');
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(page.locator('#detail-dialog')).not.toBeVisible();
 });
 
 test('keeps all primary controls keyboard reachable and usable on a narrow viewport', async ({ page }) => {
@@ -136,6 +180,13 @@ test('exposes health and refuses incomplete task submissions without starting to
   const invalid = await request.post('/api/runs', { data: { task: 'short', objective: 'too short' } });
   expect(invalid.status()).toBe(400);
   expect(await invalid.json()).toHaveProperty('error');
+  const unsupportedAgent = await request.post('/api/runs', { data: {
+    task: 'Reject an unregistered provider before creating a run',
+    objective: 'Confirm only runner-registered providers can be selected.',
+    agentId: 'run-this-command',
+  } });
+  expect(unsupportedAgent.status()).toBe(400);
+  expect(await unsupportedAgent.json()).toHaveProperty('error', 'Choose a supported coding agent.');
   const runs = await request.get('/api/runs');
   expect((await runs.json()).runs).toEqual([]);
 });
@@ -150,7 +201,7 @@ test('publishes the bundled target and rejects an unavailable repository selecti
     targetId: 'stale-target',
   } });
   expect(rejected.status()).toBe(400);
-  expect(await rejected.json()).toHaveProperty('error', 'Choose an available repository from the target picker.');
+  expect(await rejected.json()).toHaveProperty('error', 'Choose an available repository from the target picker or enter a GitHub repository link.');
 });
 
 test('adds safe response headers and blocks cross-origin state changes', async ({ request }) => {

@@ -81,18 +81,17 @@ const [{ Engine }, { Store }] = await Promise.all([
 const store = new Store(path.join(DATA_DIR, 'state.json'));
 const engine = new Engine(store);
 const preflight = await engine.preflight();
-const codexAuth = await runProcess(process.execPath, [process.env.PATCHLOOP_CODEX_ENTRY ?? globalCodexEntry(), 'login', 'status'], { timeoutMs: 12_000, maxBytes: 12_000 });
-const codexUsesApiKey = /api[ -]?key/i.test(codexAuth.stdout);
-if (!preflight.kane.installed || !preflight.kane.authenticated || !preflight.agent.installed || codexAuth.code !== 0 || codexUsesApiKey) {
-  process.stderr.write('Runner setup is incomplete. Install Kane CLI and Codex CLI, sign into Kane with `kane-cli login --oauth`, and sign into Codex with `codex login`.\n');
+if (!preflight.kane.installed || !preflight.kane.authenticated) {
+  process.stderr.write('Runner setup is incomplete. Install Kane CLI and sign into Kane with `kane-cli login --oauth`. At least one coding agent is needed for repairs; Kane verification can still run without one.\n');
   process.exit(2);
 }
 const targets = await engine.listTargets();
 const ghAuth = await runProcess('gh', ['auth', 'status'], { timeoutMs: 12_000, maxBytes: 20_000 });
 const githubCount = targets.filter((target) => target.kind === 'github').length;
-await request('/api/worker/targets', { method: 'POST', body: { targets } });
+await request('/api/worker/targets', { method: 'POST', body: { targets, agents: preflight.agents } });
 const githubNotice = ghAuth.code === 0 ? ` GitHub repositories available: ${githubCount}.` : ' GitHub is not connected; run `gh auth login` on this computer, then restart the runner.';
-process.stdout.write(`Local tools ready with ${targets.filter((target) => target.ready).length} repository target(s).${githubNotice} Watching ${siteUrl.origin} for your private tasks. Press Ctrl+C to stop.\n`);
+const agentCount = preflight.agents.filter((agent) => agent.ready).length;
+process.stdout.write(`Kane is ready. ${agentCount} coding agent(s) are ready for repairs. Local repositories: ${targets.filter((target) => target.ready).length}.${githubNotice} Watching ${siteUrl.origin} for your private tasks. Press Ctrl+C to stop.\n`);
 
 let stopping = false;
 process.on('SIGINT', () => { stopping = true; });
@@ -142,11 +141,3 @@ while (!stopping) {
 }
 
 process.stdout.write('Local runner stopped. The saved pairing will be available the next time it starts.\n');
-
-function globalCodexEntry() {
-  if (process.env.PATCHLOOP_CODEX_ENTRY) return path.resolve(process.env.PATCHLOOP_CODEX_ENTRY);
-  const npmGlobal = process.platform === 'win32'
-    ? path.join(process.env.APPDATA ?? path.join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'npm', 'node_modules')
-    : path.join(process.env.NPM_CONFIG_PREFIX ?? '/usr/local', 'lib', 'node_modules');
-  return path.join(npmGlobal, '@openai', 'codex', 'bin', 'codex.js');
-}

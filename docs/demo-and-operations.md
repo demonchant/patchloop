@@ -12,6 +12,35 @@ PatchLoop is the evidence and orchestration layer around two user-owned command 
 
 PatchLoop does not claim a pass from an agent's explanation, an incomplete run, a timeout, or a launch error. A repair needs a human action, stays in an isolated Git worktree, and must pass the same saved objective on a fresh run. After that verified pass, a second explicit user action can commit the repair locally and push a new `patchloop/repair-<id>` branch. PatchLoop does not push to the default branch, merge, deploy, or submit the repair.
 
+## Multi-agent repair operations
+
+Each task saves a fixed coding-agent ID. The runner reports a sanitized capability list to the PatchLoop session; provider sign-in identities and credentials remain local. Available command-line adapters are Codex, Claude Code, Cursor CLI, GitHub Copilot CLI, and Kiro CLI. The **Windsurf / custom MCP client** option uses a local MCP server: PatchLoop does not launch Windsurf or treat MCP as a model. The user starts the IDE agent and connects it to the PatchLoop stdio server.
+
+The provider is selected when a task is created and cannot be changed by a later runner report. After the repeatability gate and human repair action, the selected agent receives the recorded task, fixed objective, Kane failure, and isolated worktree. PatchLoop records the provider/version, exit status, bounded output, and actual worktree diff. Agent completion is not verification; Kane must pass the same saved objective on a fresh run.
+
+### Provider setup
+
+Install and sign in to the provider on the computer running the local app or paired worker. PatchLoop checks the tools locally. Use each provider's own installer and sign-in process.
+
+| Provider | Local setup | Repair path |
+| --- | --- | --- |
+| Codex | Install `@openai/codex` and sign in with `codex login`. | Ephemeral `codex exec` in the isolated worktree. |
+| Claude Code | Install `claude` and sign in locally. | Headless prompt with explicit Read, Edit, and Write tools. |
+| Cursor | Install the Cursor CLI (`agent`) and sign in with `agent login`. | Headless prompt in the isolated worktree. |
+| GitHub Copilot | Install `copilot` and sign in with Copilot or GitHub CLI. | Programmatic prompt with read/write tool availability and assisted approval. |
+| Kiro | Install `kiro-cli` and sign in locally. Headless use may require `KIRO_API_KEY`. | Noninteractive chat with explicit file read/write tools. |
+| Windsurf / custom MCP client | Set `PATCHLOOP_MCP_BRIDGE_ENABLED=true` on the runner and configure the IDE to start `node mcp-server.mjs` from the PatchLoop checkout. | The IDE calls `patchloop_get_repair_context` and `patchloop_finish_repair`; the bridge is bound to the active run and cannot mark it verified. |
+
+The MCP server and worker must share a data directory. For the paired worker, set `PATCHLOOP_DATA_DIR` in the IDE's MCP configuration to the same `.patchloop/remote-worker` directory the worker uses. The bridge accepts no browser-supplied command, URL, worktree, or acceptance objective. The IDE agent edits the provided worktree with its own workspace tools; PatchLoop computes the diff and runs Kane independently.
+
+On Windows, npm-installed command shims are started through a fixed PowerShell launcher. The selected CLI argument list is passed as JSON separately from the launch script, so browser text is not interpolated into shell source. Executable names and arguments come from the runner-owned adapter registry.
+
+### Live details and GitHub review
+
+While **Details** is open, PatchLoop requests the latest saved run record on each run-list refresh. The panel updates status, provider result, diff summary, Kane attempts, and event timeline without closing. The visible **×** closes the panel. A hosted page can display only progress that the paired runner has successfully reported.
+
+For a GitHub target, a successful same-objective Kane rerun enables **Push repair branch** after the user reviews and confirms. The runner checks that the worktree still matches the displayed diff, commits locally, and pushes a non-force `patchloop/repair-<id>` branch. It does not merge or change the default branch.
+
 ## How the service works
 
 There are two ways to use PatchLoop:

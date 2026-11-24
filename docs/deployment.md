@@ -104,3 +104,9 @@ Docker publishes only `127.0.0.1:4173`. The image runs as a non-root user with a
 - For a non-bundled target, a clean, committed Git repository following the Node target contract above.
 
 The PatchLoop hosted code does not ask users for provider credentials or an OpenAI API key. Render hosting and storage still have a project-owner cost; check the current service plan in Render before deployment.
+
+### Multi-agent runner
+
+The paired runner reports readiness for registered coding-agent adapters and the optional local MCP bridge. Install and authenticate the selected provider on the runner computer; provider account names and credentials are not sent to Render. Kane remains required for browser verification, while a missing coding agent does not prevent a Kane-only run.
+
+Set `PATCHLOOP_MCP_BRIDGE_ENABLED=true` to report the MCP option as available. Configure the IDE MCP client to launch `node mcp-server.mjs` from the PatchLoop checkout and point `PATCHLOOP_DATA_DIR` at the worker's `.patchloop/remote-worker` directory. This is a local stdio connection. See [multi-agent operations](demo-and-operations.md#multi-agent-repair-operations) for the tools and task lifecycle.

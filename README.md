@@ -160,3 +160,33 @@ The official page lists a November 26, 2026, 11:59 PM IST deadline and requires 
 - [Demo and operations guide](docs/demo-and-operations.md)
 - [Verification record](docs/verification.md)
 - [Submission notes](docs/submission.md)
+
+## Multi-agent support and PatchLoop showcase
+
+PatchLoop keeps the browser objective and repair history together so a developer can see the failure, the proposed code change, and Kane's result on the same task. A run can select a coding agent installed on its paired local runner: Codex, Claude Code, Cursor CLI, GitHub Copilot CLI, or Kiro CLI. Windsurf and other IDE agents can connect through PatchLoop's local, run-bound MCP bridge. Provider sign-ins and credentials remain on the runner. The selected agent proposes a change; PatchLoop records the worktree diff; Kane independently checks the same fixed objective.
+
+### How PatchLoop maps to the KaneCLI judging criteria
+
+The KaneCLI Online Hackathon sets three pass bars before scoring and four equally weighted judging dimensions. PatchLoop is designed to address each one as follows. See the [official KaneCLI judging criteria and rules](https://www.kaneclihack.sh/).
+
+| Judge requirement | How PatchLoop satisfies it | What judges can inspect |
+| --- | --- | --- |
+| **End-to-end flow (ship bar)** | The user submits a code-change request and a fixed browser objective. Kane runs against a selected repository on the paired local runner. After repeatable failure and human approval, the selected coding agent repairs an isolated worktree. PatchLoop records the diff, reruns the unchanged objective, and can push a verified repair to a review branch after separate approval. | Workbench and runner workflow; task timeline; repair diff; repeated Kane attempts; final objective hash and result; optional `patchloop/repair-<id>` branch. See [operations](docs/demo-and-operations.md) and [target repositories](docs/target-repositories.md). |
+| **Kane CLI catches or proves something meaningful (ship bar)** | Kane uses a real browser to exercise the saved acceptance objective. A failed observation remains attached to the task, and a repair is not marked successful until a fresh Kane run passes the same objective with a successful process exit. | Kane attempt records, final event, process/result code, recorded browser steps, and immutable objective hash. See [verification](docs/verification.md). |
+| **Agent and Kane communicate (ship bar)** | PatchLoop sends the selected agent the recorded Kane failure and the original task after two consecutive matching failures and a human repair action. The agent's diff is retained, and Kane receives the unchanged objective again for independent verification. | Timeline events showing Kane failure → agent repair → diff → Kane rerun. The local MCP option uses the same run-bound context and completion handoff. |
+| **Ships (25%)** | PatchLoop provides a usable local or hosted workbench, paired local runner, repository selection, task submission, real-browser execution, repair controls, reviewable evidence, and a GitHub branch-push path. | Run the app using [local/hosted setup](docs/demo-and-operations.md); inspect the repository, runner, task history, and GitHub review branch. |
+| **Verified (25%)** | Kane's actual final browser event and process exit determine the verdict. Agent output alone cannot mark a task verified. The objective hash stays fixed from submission through repair and rerun. | Details panel: objective hash, browser attempts, final Kane event, exit/result code, provider result, and worktree diff. See [verification rules](docs/verification.md). |
+| **Closed loop (25%)** | Kane's recorded failure feeds into the selected agent's repair context. PatchLoop keeps the result and diff, then routes the same objective back to Kane. Humans approve repair and GitHub publication. | Run timeline and before/after evidence in Details; “Push repair branch” is gated on a verified result and a separate confirmation. |
+| **Craft (25%)** | PatchLoop makes task status, provider, attempts, objective, timeline, and diff inspectable. Details refreshes while open. Provider credentials stay local, hosted records are account-scoped, repairs use isolated Git worktrees, and GitHub publishing creates a review branch rather than changing the default branch. | Workbench and live Details panel; [architecture and trust boundaries](docs/architecture.md); [deployment and operations](docs/deployment.md). |
+
+### Demo and repositories
+
+**Load the bundled demo task** fills the requested change and Kane objective fields; it does not start a run or change the repository selection. **Bundled Goodwork demo** in the repository selector chooses PatchLoop's small local sample app, prepared in a disposable work directory. The task text and target application are separate choices.
+
+The full showcase target is [demonchant/patchloop-full-showcase2](https://github.com/demonchant/patchloop-full-showcase2). PatchLoop itself, including the app and paired runner, is [demonchant/patchloop](https://github.com/demonchant/patchloop). The showcase scenario centers on preserving a completed task's title and checked state through archive and restore. The task timeline brings the original Kane result, selected agent repair, before/after diff, unchanged objective, and follow-up Kane result into one review.
+
+The **Push repair branch** action demonstrates PatchLoop's repair-to-review capability: after a verified repair on a GitHub target, the user can approve a local commit and push to a new `patchloop/repair-<id>` branch. PatchLoop records the branch and commit in Details; it does not merge the branch or alter the default branch.
+
+For setup instructions for each provider and the local MCP bridge, see [Multi-agent repair operations](docs/demo-and-operations.md#multi-agent-repair-operations).
+
+Current syntax, Node, and Playwright results—with the saved logs and browser report—are in [validation results](verification-results/README.md).

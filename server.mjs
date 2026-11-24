@@ -9,6 +9,7 @@ import { hashText, redact } from './lib/process.mjs';
 import { createGoogleAuth } from './lib/google-auth.mjs';
 import { canReadRun as isOwnedRun } from './lib/authorization.mjs';
 import { parseGitHubRepositoryUrl } from './lib/github-repository.mjs';
+import { AGENT_REGISTRY, agentName, isAgentReady } from './lib/agent-adapters.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -131,7 +132,8 @@ async function route(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/worker/targets') {
       const input = await bodyJson(req, 100_000);
       if (!Array.isArray(input.targets)) return send(res, 400, { error: 'Target catalog is required.' });
-      return send(res, 200, { targets: await store.setWorkerTargets(tokenHash, input.targets) });
+      if (!Array.isArray(input.agents)) return send(res, 400, { error: 'Coding-agent capabilities are required.' });
+      return send(res, 200, { targets: await store.setWorkerTargets(tokenHash, input.targets, input.agents) });
     }
     if (req.method === 'POST' && url.pathname === '/api/worker/report') {
       const snapshot = await bodyJson(req, 2_000_000);
@@ -191,6 +193,8 @@ async function route(req, res) {
     const input = await bodyJson(req);
     const task = typeof input.task === 'string' ? input.task.trim() : '';
     const objective = typeof input.objective === 'string' ? input.objective.trim() : '';
+    const agentId = typeof input.agentId === 'string' ? input.agentId : 'codex';
+    if (!AGENT_REGISTRY.some((agent) => agent.id === agentId && agent.supported !== false)) return send(res, 400, { error: 'Choose a supported coding agent.' });
     if (task.length < 12 || task.length > 1600) return send(res, 400, { error: 'Describe the change in 12–1600 characters.' });
     if (objective.length < 16 || objective.length > 1800) return send(res, 400, { error: 'Acceptance objective must be 16–1800 characters.' });
     if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(task + objective)) return send(res, 400, { error: 'Control characters are not allowed.' });
@@ -219,7 +223,7 @@ async function route(req, res) {
         } catch { return send(res, 400, { error: 'The selected GitHub repository is invalid. Restart the local runner and refresh the page.' }); }
       }
     }
-    const run = await store.create({ task, objective, objectiveHash: hashText(objective), targetId, targetUrl, targetName, ownerId: HOSTED ? user.sub : null });
+    const run = await store.create({ task, objective, objectiveHash: hashText(objective), agentId, targetId, targetUrl, targetName, ownerId: HOSTED ? user.sub : null });
     if (HOSTED) await store.update(run.id, (item) => { item.workerAction = 'verify'; });
     else void engine.startVerification(run.id).catch((error) => store.update(run.id, (item) => { item.state = 'setup_error'; item.events.push({ at: new Date().toISOString(), type: 'setup_error', message: redact(error.message) }); }));
     return send(res, 202, { run });
@@ -252,7 +256,12 @@ async function route(req, res) {
       if (!HOSTED && engine.busy) return send(res, 409, { error: 'Another Kane or agent process is running.' });
       const run = await store.get(id);
       if (!canReadRun(user, run) || !['needs_review', 'agent_error'].includes(run.state)) return send(res, 409, { error: 'Only your recorded Kane failure or failed agent call can be retried.' });
-      if (HOSTED) await store.update(id, (item) => { item.workerFromState = item.state; item.state = 'queued'; item.workerAction = 'repair'; item.events.push({ at: new Date().toISOString(), type: 'repair_queued', message: 'The recorded failure is waiting for your paired local runner.' }); });
+      if (HOSTED) {
+        const worker = await store.workerStatus(user.sub);
+        if (!worker.connected) return send(res, 409, { error: 'Your paired local runner is offline. Start it before requesting a repair.' });
+        if (!isAgentReady(worker.agents, run.agentId ?? 'codex')) return send(res, 409, { error: `${agentName(run.agentId ?? 'codex')} is not ready on your paired computer. Check its local installation and sign-in, then restart the runner.` });
+        await store.update(id, (item) => { item.workerFromState = item.state; item.state = 'queued'; item.workerAction = 'repair'; item.events.push({ at: new Date().toISOString(), type: 'repair_queued', message: `The recorded failure is waiting for your paired runner to start ${agentName(item.agentId ?? 'codex')}.` }); });
+      }
       else void engine.repair(id).catch((error) => store.update(id, (item) => { item.state = 'agent_error'; item.events.push({ at: new Date().toISOString(), type: 'agent_error', message: redact(error.message) }); }));
       return send(res, 202, { accepted: true });
     }
@@ -262,7 +271,7 @@ async function route(req, res) {
       const run = await store.get(id);
       const latestKane = [...(run?.attempts ?? [])].reverse().find((attempt) => attempt.kind === 'kane');
       const latestAgent = [...(run?.attempts ?? [])].reverse().find((attempt) => attempt.kind === 'agent');
-      if (!canReadRun(user, run) || run.state !== 'verified' || !run.targetUrl || !run.lastDiff || run.repairCount < 1 || latestKane?.verdict !== 'passed' || latestAgent?.exitCode !== 0 || !latestAgent.changed) return send(res, 409, { error: 'Only a verified Codex repair for a GitHub target can be pushed.' });
+      if (!canReadRun(user, run) || run.state !== 'verified' || !run.targetUrl || !run.lastDiff || run.repairCount < 1 || latestKane?.verdict !== 'passed' || latestAgent?.exitCode !== 0 || !latestAgent.changed) return send(res, 409, { error: 'Only a verified agent repair for a GitHub target can be pushed.' });
       if (run.pushStatus === 'queued' || run.pushStatus === 'pushing' || run.pushStatus === 'pushed') return send(res, 409, { error: run.pushStatus === 'pushed' ? 'This repair branch has already been pushed.' : 'This repair is already being pushed.' });
       if (HOSTED) {
         await store.update(id, (item) => {

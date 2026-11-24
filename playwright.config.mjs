@@ -1,6 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
 const external = Boolean(process.env.BASE_URL);
+const appPort = Number(process.env.PATCHLOOP_E2E_PORT ?? 4188);
+const demoPort = Number(process.env.PATCHLOOP_E2E_DEMO_PORT ?? 4180);
+const appUrl = `http://127.0.0.1:${appPort}`;
+const demoUrl = `http://127.0.0.1:${demoPort}`;
+process.env.DEMO_URL ??= demoUrl;
 
 export default defineConfig({
   testDir: './e2e',
@@ -11,7 +16,7 @@ export default defineConfig({
   outputDir: process.env.TEST_OUTPUT_DIR ?? 'test-results',
   timeout: 20_000,
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:4188',
+    baseURL: process.env.BASE_URL ?? appUrl,
     browserName: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -21,23 +26,23 @@ export default defineConfig({
     webServer: [
       {
         command: 'node server.mjs',
-        url: 'http://127.0.0.1:4188/api/health',
+        url: `${appUrl}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 15_000,
         env: {
           PATCHLOOP_HOST: '127.0.0.1',
-          PATCHLOOP_PORT: '4188',
+          PATCHLOOP_PORT: String(appPort),
           PATCHLOOP_DATA_DIR: '.patchloop/e2e-state',
         },
       },
       {
         command: 'node demo-template/server.mjs',
-        url: 'http://127.0.0.1:4180/api/health',
+        url: `${demoUrl}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 15_000,
         env: {
           PATCHLOOP_HOST: '127.0.0.1',
-          PATCHLOOP_PORT: '4180',
+          PATCHLOOP_PORT: String(demoPort),
           PATCHLOOP_DATA_DIR: '.patchloop/e2e-demo-state',
         },
       },
