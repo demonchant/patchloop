@@ -1,0 +1,30 @@
+
+> patchloop@1.0.0 test
+> node --test --test-reporter=spec
+
+✔ showcase seed reproduces the disclosed restore regression (1181.3126ms)
+✔ capability sanitization exposes only registered provider metadata (33.8902ms)
+✔ provider invocation builders use fixed CLIs and bounded permission flags (1.9969ms)
+✔ Codex adapter invokes only its fixed entry and captures provider version and exit (2854.3694ms)
+✔ private run records are visible only to their owning account (2.3766ms)
+✔ signed sessions reject tampering and expired claims (10.1236ms)
+✔ catalog registers a committed manifest target without exposing its checkout path (3782.842ms)
+✔ invalid target manifests leave the bundled repository available and hide local errors (1805.5806ms)
+✔ launches the showcase manifest in an isolated worktree and waits for its health path (1502.3764ms)
+✔ MCP bridge exposes only run-bound context and records completion for independent checks (1749.957ms)
+✔ MCP bridge refuses a worktree outside the run-specific worker directory (5.4476ms)
+✔ acceptance objective hashing is stable and content-sensitive (26.7861ms)
+✔ Kane parser requires a final run_end event and successful code (2.041ms)
+✔ redactor removes credential-shaped strings and signed query URLs (1.745ms)
+✔ first failure requires exact replay before Codex repair; conflicting replay is inconclusive (1.0876ms)
+✔ run history survives store reconstruction and objective hash remains attached (218.813ms)
+✔ worker repository catalogs omit local paths and task targets cannot change during reports (326.5292ms)
+✔ worker recovers a completed report after heartbeat loss, but rejects it after a newer claim (1384.3442ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7429.0695

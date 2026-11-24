@@ -52,7 +52,7 @@ async function request(endpoint, { method = 'GET', body, authenticated = true } 
   const content = await response.text();
   let result;
   try { result = content ? JSON.parse(content) : {}; } catch { result = {}; }
-  if (!response.ok) throw new Error(result.error ?? `PatchLoop request failed (${response.status}).`);
+  if (!response.ok) throw Object.assign(new Error(result.error ?? `PatchLoop request failed (${response.status}).`), { status: response.status });
   return result;
 }
 
@@ -97,6 +97,34 @@ let stopping = false;
 process.on('SIGINT', () => { stopping = true; });
 process.on('SIGTERM', () => { stopping = true; });
 
+async function reportRun(id, { retry = false, quiet = false } = {}) {
+  let delay = 1000;
+  do {
+    try {
+      const current = await store.get(id);
+      if (!current) return false;
+      await request('/api/worker/report', { method: 'POST', body: current });
+      await store.update(id, (run) => { run.workerSyncPending = false; });
+      return true;
+    } catch (error) {
+      if (!quiet || !error.status || error.status >= 500) process.stderr.write(`Progress sync delayed: ${error.message}\n`);
+      if (!retry || (error.status && error.status < 500) || stopping) return false;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, 30_000);
+    }
+  } while (retry && !stopping);
+  return false;
+}
+
+// A prior runner process may have completed a job while the hosted service was
+// unreachable. Offer recent terminal snapshots once; the server accepts them
+// only when the matching assignment was marked lost and no newer claim exists.
+for (const saved of await store.list()) {
+  const finished = [...saved.events].reverse().find((event) => ['repair_finished', 'verification_finished'].includes(event.type));
+  if (!finished || Date.now() - Date.parse(finished.at) > 60 * 60 * 1000 || ['queued', 'verifying', 'repairing'].includes(saved.state)) continue;
+  await reportRun(saved.id, { quiet: true });
+}
+
 while (!stopping) {
   try {
     const response = await request('/api/worker/next');
@@ -108,14 +136,12 @@ while (!stopping) {
     const action = remoteRun.workerAction;
     await store.importWorkerRun(remoteRun, action);
     process.stdout.write(`Running ${action} for ${remoteRun.id}. Task and provider execution remain on this computer.\n`);
+    await store.update(remoteRun.id, (run) => { run.workerAction = action; run.workerSyncPending = true; });
     let reportRunning = false;
-    const report = async () => {
-      if (reportRunning) return;
+    const report = async (retry = false) => {
+      if (reportRunning) return false;
       reportRunning = true;
-      try {
-        const current = await store.get(remoteRun.id);
-        if (current) await request('/api/worker/report', { method: 'POST', body: current });
-      } catch (error) { process.stderr.write(`Progress sync delayed: ${error.message}\n`); }
+      try { return await reportRun(remoteRun.id, { retry }); }
       finally { reportRunning = false; }
     };
     const heartbeat = setInterval(() => { void report(); }, 1800);
@@ -131,11 +157,14 @@ while (!stopping) {
       });
     } finally {
       clearInterval(heartbeat);
-      await report();
+      while (reportRunning && !stopping) await new Promise((resolve) => setTimeout(resolve, 250));
+      await store.update(remoteRun.id, (run) => { run.workerSyncPending = true; });
+      await report(true);
     }
     process.stdout.write(`Finished ${remoteRun.id}. Review the evidence in the PatchLoop page.\n`);
   } catch (error) {
-    process.stderr.write(`Runner connection: ${error.message}\n`);
+    const detail = error.cause?.code ?? error.cause?.message;
+    process.stderr.write(`Runner connection: ${error.message}${detail ? ` (${detail})` : ''}\n`);
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 }

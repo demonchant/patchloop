@@ -248,7 +248,9 @@ async function route(req, res) {
       if (!EXECUTION_ENABLED) return send(res, 503, { error: 'Hosted execution is paused until isolated per-user workers are available.' });
       if (!HOSTED && engine.busy) return send(res, 409, { error: 'Another Kane or agent process is running.' });
       const run = await store.get(id);
-      if (!canReadRun(user, run) || !['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state)) return send(res, 409, { error: 'This task cannot be re-verified yet.' });
+      const latestAgent = run ? [...run.attempts].reverse().find((attempt) => attempt.kind === 'agent') : null;
+      const savedAgentDiff = run?.state === 'agent_error' && Boolean(run.lastDiff) && latestAgent?.changed === true;
+      if (!canReadRun(user, run) || (!['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state) && !savedAgentDiff)) return send(res, 409, { error: 'This task cannot be re-verified yet.' });
       if (HOSTED) await store.update(id, (item) => { item.state = 'queued'; item.workerAction = 'verify'; item.events.push({ at: new Date().toISOString(), type: 'verification_queued', message: 'The unchanged objective is waiting for your paired local runner.' }); });
       else void engine.startVerification(id).catch((error) => store.update(id, (item) => { item.state = 'setup_error'; item.events.push({ at: new Date().toISOString(), type: 'setup_error', message: redact(error.message) }); }));
       return send(res, 202, { accepted: true });
@@ -273,7 +275,7 @@ async function route(req, res) {
       const run = await store.get(id);
       const latestKane = [...(run?.attempts ?? [])].reverse().find((attempt) => attempt.kind === 'kane');
       const latestAgent = [...(run?.attempts ?? [])].reverse().find((attempt) => attempt.kind === 'agent');
-      if (!canReadRun(user, run) || run.state !== 'verified' || !run.targetUrl || !run.lastDiff || run.repairCount < 1 || latestKane?.verdict !== 'passed' || latestAgent?.exitCode !== 0 || !latestAgent.changed) return send(res, 409, { error: 'Only a verified agent repair for a GitHub target can be pushed.' });
+      if (!canReadRun(user, run) || run.state !== 'verified' || !run.targetUrl || !run.lastDiff || run.repairCount < 1 || latestKane?.verdict !== 'passed' || !latestAgent?.changed) return send(res, 409, { error: 'Only a verified agent repair for a GitHub target can be pushed.' });
       if (run.pushStatus === 'queued' || run.pushStatus === 'pushing' || run.pushStatus === 'pushed') return send(res, 409, { error: run.pushStatus === 'pushed' ? 'This repair branch has already been pushed.' : 'This repair is already being pushed.' });
       if (HOSTED) {
         await store.update(id, (item) => {

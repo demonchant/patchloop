@@ -167,7 +167,7 @@ async function loadPreflight() {
 }
 
 function eventLabel(event) {
-  return ({ created: 'Task submitted', worker_claimed: 'Local runner accepted task', verification_queued: 'Kane run queued', repair_queued: 'Repair queued', worker_lost: 'Local runner disconnected', worker_disconnected: 'Local runner disconnected', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Agent repair started', repair_finished: 'Agent repair completed', github_push_queued: 'GitHub push queued', github_push_started: 'GitHub branch push started', github_push_finished: 'GitHub branch pushed', github_push_failed: 'GitHub push failed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
+  return ({ created: 'Task submitted', worker_claimed: 'Local runner accepted task', verification_queued: 'Kane run queued', repair_queued: 'Repair queued', worker_lost: 'Local runner disconnected', worker_disconnected: 'Local runner disconnected', worker_report_recovered: 'Completed result synced after reconnect', verification_started: 'Kane browser run started', kane_flow_prepared: 'Kane prepared the flow', kane_action_started: 'Kane action started', verification_finished: 'Kane browser run completed', repair_started: 'Agent repair started', repair_finished: 'Agent repair completed', github_push_queued: 'GitHub branch push queued', github_push_started: 'GitHub branch push started', github_push_finished: 'GitHub branch pushed', github_push_failed: 'GitHub push failed', setup_error: 'Setup failed', agent_error: 'Agent stopped' })[event.type] ?? event.type;
 }
 
 function renderRun(run) {
@@ -175,10 +175,11 @@ function renderRun(run) {
   const attempts = run.attempts.filter((attempt) => attempt.kind === 'kane');
   const lastTwo = attempts.slice(-2);
   const repeatedFailure = lastTwo.length === 2 && lastTwo.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
-  const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
-  const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state);
   const latestAgent = [...run.attempts].reverse().find((attempt) => attempt.kind === 'agent');
-  const canPush = run.targetUrl && run.state === 'verified' && run.repairCount > 0 && Boolean(run.lastDiff) && latest?.verdict === 'passed' && latestAgent?.exitCode === 0 && latestAgent.changed;
+  const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
+  const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state)
+    || (run.state === 'agent_error' && Boolean(run.lastDiff) && latestAgent?.changed === true);
+  const canPush = run.targetUrl && run.state === 'verified' && run.repairCount > 0 && Boolean(run.lastDiff) && latest?.verdict === 'passed' && latestAgent?.changed;
   const pushUrl = run.targetUrl && run.pushBranch ? `${run.targetUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/tree/${run.pushBranch.split('/').map(encodeURIComponent).join('/')}` : '';
   const pushAction = canPush ? (run.pushStatus === 'pushed'
     ? `<a class="small-button" href="${escapeHtml(pushUrl)}" target="_blank" rel="noreferrer">Open pushed branch ↗</a>`
@@ -188,9 +189,12 @@ function renderRun(run) {
   const runDetails = `${run.attempts.length} recorded step${run.attempts.length === 1 ? '' : 's'}`;
   const latestText = latest ? `${latest.verdict}${latest.resultCode !== null ? ` · code ${latest.resultCode}` : ''}` : 'Waiting for Kane';
   const targetText = run.targetName ? ` · ${run.targetName}` : '';
+  const activeRun = ['queued', 'verifying', 'repairing'].includes(run.state);
+  const staleSeconds = activeRun && run.updatedAt ? Math.floor((Date.now() - Date.parse(run.updatedAt)) / 1000) : 0;
+  const staleText = staleSeconds >= 45 ? `<span class="runner-stale">No runner update for ${Math.floor(staleSeconds / 60)}m ${staleSeconds % 60}s</span>` : '';
   return `<article class="run-card" data-run-card="${run.id}">
     <div class="run-main"><div class="run-status status-${escapeHtml(run.state)}"><i class="status-dot"></i>${escapeHtml(humanState(run.state))}</div>
-      <div class="run-copy"><div class="run-task">${escapeHtml(run.task)}</div><div class="run-meta"><span>${escapeHtml(stamp(run.createdAt))}${escapeHtml(targetText)}</span><span>${escapeHtml(providerName)}</span><span>${escapeHtml(runDetails)}</span><span>${escapeHtml(latestText)}</span><span>objective ${escapeHtml(shortHash(run.objectiveHash))}</span></div></div>
+      <div class="run-copy"><div class="run-task">${escapeHtml(run.task)}</div><div class="run-meta"><span>${escapeHtml(stamp(run.createdAt))}${escapeHtml(targetText)}</span><span>${escapeHtml(providerName)}</span><span>${escapeHtml(runDetails)}</span><span>${escapeHtml(latestText)}</span><span>objective ${escapeHtml(shortHash(run.objectiveHash))}</span>${staleText}</div></div>
       <div class="run-actions">${action}${pushAction}<button class="small-button" data-action="details" data-id="${run.id}">Details</button></div></div>
     <button class="run-expand" type="button" data-action="details" data-id="${run.id}">Open immutable objective and evidence ↓</button>
   </article>`;
@@ -280,11 +284,19 @@ form.addEventListener('submit', async (event) => {
 function renderDetails(run) {
   const provider = agentName(run.agentId ?? 'codex');
   const latestAgent = [...run.attempts].reverse().find((attempt) => attempt.kind === 'agent');
-  const repairSummary = latestAgent
+  const activeRun = ['queued', 'verifying', 'repairing'].includes(run.state);
+  const staleSeconds = activeRun && run.updatedAt ? Math.floor((Date.now() - Date.parse(run.updatedAt)) / 1000) : 0;
+  const repairSummary = run.state === 'repairing' && staleSeconds >= 45
+    ? `${provider} has not sent an update for ${Math.floor(staleSeconds / 60)}m ${staleSeconds % 60}s. The runner may have lost its connection; restart it to sync the saved result.`
+    : run.state === 'repairing'
+      ? `${provider} is repairing the task in the isolated worktree. This run record refreshes as progress arrives.`
+      : run.state === 'agent_error' && latestAgent?.changed && run.lastDiff
+        ? `${provider} stopped with an error after saving a code diff. The diff is available above; run the same Kane check to verify the saved change.`
+        : latestAgent
     ? (latestAgent.exitCode === 0 && latestAgent.changed
       ? `${agentName(latestAgent.providerId ?? run.agentId ?? 'codex')} finished with a code change. Kane still needs to rerun the fixed objective.`
       : `${agentName(latestAgent.providerId ?? run.agentId ?? 'codex')} did not produce a successful code change. Review its recorded output before retrying.`)
-    : (run.state === 'repairing' ? `${provider} is working in the isolated repair worktree.` : `No ${provider} repair attempt is recorded yet.`);
+    : `No ${provider} repair attempt is recorded yet.`;
   const attempts = run.attempts.map((attempt) => {
     const attemptProvider = attempt.kind === 'agent' ? agentName(attempt.providerId ?? run.agentId ?? 'codex') : 'Kane CLI';
     const providerVersion = attempt.providerVersion ? ` · ${attempt.providerVersion}` : '';

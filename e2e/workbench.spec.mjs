@@ -155,6 +155,7 @@ test('keeps Details live while open and closes it with the visible X control', a
   const record = {
     id: 'live-detail-run', task: 'Preserve the completed state after restore.', objective: 'Restore the task with its title and completed checkmark.',
     objectiveHash: 'fixed-objective-hash', targetName: 'Bundled Goodwork demo', agentId: 'cursor', state: 'repairing', repairCount: 0,
+    updatedAt: new Date(Date.now() - 60_000).toISOString(),
     attempts: [{ id: 'kane-1', kind: 'kane', verdict: 'failed', objectiveHash: 'fixed-objective-hash', exitCode: 1, outputTail: 'The restored task is unchecked.', startedAt: new Date().toISOString() }],
     events: [{ type: 'repair_started', at: new Date().toISOString(), message: 'Cursor CLI started the isolated repair.' }],
   };
@@ -169,6 +170,7 @@ test('keeps Details live while open and closes it with the visible X control', a
   await page.goto('/');
   await page.getByRole('button', { name: 'Details' }).click();
   await expect(page.locator('#detail-body')).toContainText('Cursor CLI started the isolated repair.');
+  await expect(page.locator('#detail-body')).toContainText(/has not sent an update for 1m \d+s/);
   await page.evaluate(() => {
     window.dispatchEvent(new CustomEvent('test-update-details'));
   });
@@ -186,6 +188,39 @@ test('keeps Details live while open and closes it with the visible X control', a
   await expect(page.locator('#detail-refresh-state')).toContainText('live while open');
   await page.getByRole('button', { name: 'Close details' }).click();
   await expect(page.locator('#detail-dialog')).not.toBeVisible();
+});
+
+test('offers Kane verification for a saved diff after the agent exits with an error', async ({ page }) => {
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const run = {
+    id: 'saved-diff-run', task: 'Preserve completed status during restore.', objective: 'Restore a completed task and confirm the checkbox remains checked.',
+    objectiveHash: 'saved-objective', agentId: 'codex', state: 'agent_error', repairCount: 2, updatedAt: new Date().toISOString(),
+    lastDiff: 'diff --git a/server.mjs b/server.mjs\n+preserve completed', diffStat: 'server.mjs | 1 +',
+    attempts: [
+      { id: 'verify-1', kind: 'kane', verdict: 'failed', objectiveHash: 'saved-objective', exitCode: 1, outputTail: 'Restore cleared completed state.' },
+      { id: 'agent-2', kind: 'agent', providerId: 'codex', changed: true, exitCode: 2, outputTail: 'Codex stopped after saving the change.' },
+    ],
+    events: [{ type: 'repair_finished', at: new Date().toISOString(), message: 'Codex produced a diff but exited with an error.' }],
+  };
+  let verifyRequested = false;
+  await page.route('**/api/session', (route) => route.fulfill(json({ mode: 'google', authenticated: true, executionEnabled: true, user: { name: 'Demo User' } })));
+  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: false, agents: [] } })));
+  await page.route('**/api/targets', (route) => route.fulfill(json({ targets: [{ id: 'bundled-demo', name: 'Bundled Goodwork demo', ready: true }] })));
+  await page.route('**/api/runs/saved-diff-run', (route) => route.fulfill(json({ run })));
+  await page.route('**/api/runs/saved-diff-run/verify', async (route) => {
+    verifyRequested = route.request().method() === 'POST';
+    await route.fulfill(json({ accepted: true }));
+  });
+  await page.route('**/api/runs', (route) => route.fulfill(json({ runs: [run] })));
+
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Run same Kane check ↻' })).toBeVisible();
+  await page.getByRole('button', { name: 'Details' }).click();
+  await expect(page.locator('#detail-body')).toContainText('stopped with an error after saving a code diff');
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await page.getByRole('button', { name: 'Run same Kane check ↻' }).click();
+  await expect(page.getByText(/unchanged objective is queued for your local runner/)).toBeVisible();
+  expect(verifyRequested).toBe(true);
 });
 
 test('keeps all primary controls keyboard reachable and usable on a narrow viewport', async ({ page }) => {
