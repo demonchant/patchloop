@@ -2,23 +2,23 @@
 > patchloop@1.0.0 test
 > node --test --test-reporter=spec
 
-✔ showcase seed reproduces the disclosed restore regression (1365.6143ms)
-✔ capability sanitization exposes only registered provider metadata (31.2863ms)
-✔ provider invocation builders use fixed CLIs and bounded permission flags (2.6386ms)
-✔ Codex adapter invokes only its fixed entry and captures provider version and exit (4663.7938ms)
-✔ private run records are visible only to their owning account (3.91ms)
-✔ signed sessions reject tampering and expired claims (45.1923ms)
-✔ catalog registers a committed manifest target without exposing its checkout path (5444.9521ms)
-✔ invalid target manifests leave the bundled repository available and hide local errors (2879.3354ms)
-✔ launches the showcase manifest in an isolated worktree and waits for its health path (3810.6878ms)
-✔ MCP bridge exposes only run-bound context and records completion for independent checks (1221.2066ms)
-✔ MCP bridge refuses a worktree outside the run-specific worker directory (4.9732ms)
-✔ acceptance objective hashing is stable and content-sensitive (4.2047ms)
-✔ Kane parser requires a final run_end event and successful code (3.4669ms)
-✔ redactor removes credential-shaped strings and signed query URLs (1.8798ms)
-✔ first failure requires exact replay before Codex repair; conflicting replay is inconclusive (0.7324ms)
-✔ run history survives store reconstruction and objective hash remains attached (292.9182ms)
-✔ worker repository catalogs omit local paths and task targets cannot change during reports (1106.0798ms)
+✔ showcase seed reproduces the disclosed restore regression (3183.15ms)
+✔ capability sanitization exposes only registered provider metadata (68.2277ms)
+✔ provider invocation builders use fixed CLIs and bounded permission flags (4.2749ms)
+✔ Codex adapter invokes only its fixed entry and captures provider version and exit (6510.5126ms)
+✔ private run records are visible only to their owning account (5.5386ms)
+✔ signed sessions reject tampering and expired claims (11.1679ms)
+✔ catalog registers a committed manifest target without exposing its checkout path (7277.0876ms)
+✔ invalid target manifests leave the bundled repository available and hide local errors (3074.5285ms)
+✔ launches the showcase manifest in an isolated worktree and waits for its health path (3133.2149ms)
+✔ MCP bridge exposes only run-bound context and records completion for independent checks (2439.9293ms)
+✔ MCP bridge refuses a worktree outside the run-specific worker directory (15.4415ms)
+✔ acceptance objective hashing is stable and content-sensitive (20.0244ms)
+✔ Kane parser requires a final run_end event and successful code (1.6446ms)
+✔ redactor removes credential-shaped strings and signed query URLs (4.6342ms)
+✔ first failure requires exact replay before Codex repair; conflicting replay is inconclusive (2.6644ms)
+✔ run history survives store reconstruction and objective hash remains attached (679.7782ms)
+✔ worker repository catalogs omit local paths and task targets cannot change during reports (1968.041ms)
 ℹ tests 17
 ℹ suites 0
 ℹ pass 17
@@ -26,4 +26,4 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 12764.7224
+ℹ duration_ms 14266.778
