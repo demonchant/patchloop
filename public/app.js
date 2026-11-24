@@ -132,14 +132,16 @@ async function loadTargets() {
     const { targets = [] } = await api('/api/targets');
     availableTargets = targets.filter((target) => target.ready);
     const current = select.value;
+    const hadChoices = select.options.length > 1;
     const nextOptions = availableTargets.length
-      ? availableTargets.map((target) => ({ id: target.id, name: `${target.name}${target.kind === 'github' && target.isPrivate ? ' · private' : ''}` }))
+      ? [{ id: '', name: 'Choose a repository or paste a GitHub link' }, ...availableTargets.map((target) => ({ id: target.id, name: `${target.name}${target.kind === 'github' && target.isPrivate ? ' · private' : ''}` }))]
       : [{ id: '', name: 'Connect a runner to load repositories' }];
     const optionsUnchanged = select.options.length === nextOptions.length
       && nextOptions.every((target, index) => select.options[index].value === target.id && select.options[index].textContent === target.name);
     if (!optionsUnchanged) {
       select.innerHTML = nextOptions.map((target) => '<option value="' + escapeHtml(target.id) + '">' + escapeHtml(target.name) + '</option>').join('');
       if (availableTargets.some((target) => target.id === current)) select.value = current;
+      else select.value = hadChoices && current === '' ? '' : (availableTargets.some((target) => target.id === 'bundled-demo') ? 'bundled-demo' : '');
     }
     select.disabled = !availableTargets.length;
     const selected = availableTargets.find((target) => target.id === select.value);
@@ -149,6 +151,9 @@ async function loadTargets() {
 $('#target-repo').addEventListener('change', () => {
   const selected = availableTargets.find((target) => target.id === $('#target-repo').value);
   $('#target-requirements').textContent = selected?.requirements ?? 'This repository runs in a disposable worktree on your paired computer.';
+});
+$('#target-github-url').addEventListener('input', () => {
+  if ($('#target-github-url').value.trim()) $('#target-repo').value = '';
 });
 
 async function loadPreflight() {

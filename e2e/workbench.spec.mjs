@@ -110,12 +110,41 @@ test('shows reported repository choices and submits the selected target id', asy
   await page.goto('/');
   const picker = page.getByLabel('Target repository');
   await expect(picker).toHaveValue('bundled-demo');
-  await expect(picker.locator('option')).toHaveCount(2);
+  await expect(picker.locator('option')).toHaveCount(3);
   await picker.selectOption('configured');
   await expect(page.locator('#target-requirements')).toHaveText('Node.js 20+ and committed Git checkout.');
   await page.getByLabel('Coding agent', { exact: true }).selectOption('cursor');
   await page.getByLabel('What should the coding agent change?').fill('Keep a completed task checked after restore.');
   await page.getByLabel(/Fixed Kane acceptance objective/).fill('Create, complete, archive, and restore a task, then confirm its title and completed checkbox are preserved.');
+  await page.getByRole('button', { name: 'Run Kane verification' }).click();
+  await expect(page.getByText(/is queued for your local runner/)).toBeVisible();
+});
+
+test('clears the default target when a GitHub repository link is entered', async ({ page }) => {
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/session', (route) => route.fulfill(json({ mode: 'google', authenticated: true, executionEnabled: true, user: { name: 'Demo User' } })));
+  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: false, agents: [
+    { id: 'codex', name: 'Codex', supported: true, installed: true, authenticated: true, ready: true },
+  ] } })));
+  await page.route('**/api/targets', (route) => route.fulfill(json({ targets: [{ id: 'bundled-demo', name: 'Bundled Goodwork demo', ready: true }] })));
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() === 'POST') {
+      const payload = route.request().postDataJSON();
+      expect(payload.targetId).toBeNull();
+      expect(payload.targetUrl).toBe('https://github.com/demonchant/patchloop-full-showcase2');
+      await route.fulfill(json({ run: { id: 'demo-run-id', ...payload } }));
+      return;
+    }
+    await route.fulfill(json({ runs: [] }));
+  });
+
+  await page.goto('/');
+  const picker = page.getByLabel('Target repository');
+  await expect(picker).toHaveValue('bundled-demo');
+  await page.getByLabel('Or use a GitHub repository link').fill('https://github.com/demonchant/patchloop-full-showcase2');
+  await expect(picker).toHaveValue('');
+  await page.getByLabel('What should the coding agent change?').fill('Keep the completed task state after restore.');
+  await page.getByLabel(/Fixed Kane acceptance objective/).fill('Archive a completed task, restore it, and confirm its title and completion checkbox are preserved.');
   await page.getByRole('button', { name: 'Run Kane verification' }).click();
   await expect(page.getByText(/is queued for your local runner/)).toBeVisible();
 });
