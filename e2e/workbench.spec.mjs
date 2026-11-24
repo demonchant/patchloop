@@ -223,6 +223,40 @@ test('offers Kane verification for a saved diff after the agent exits with an er
   expect(verifyRequested).toBe(true);
 });
 
+test('allows one Codex retry after its Windows command rejects the prompt argument', async ({ page }) => {
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  const badInvocation = { kind: 'agent', providerId: 'codex', exitCode: 2, changed: false, outputTail: "error: unexpected argument 'available:' found" };
+  const run = {
+    id: 'codex-argument-failure', task: 'Repair the completed restore state.', objective: 'Restore a completed task without clearing its checkmark.',
+    objectiveHash: 'locked-objective', targetId: 'bundled-demo', agentId: 'codex', state: 'agent_error', repairCount: 2, updatedAt: new Date().toISOString(),
+    attempts: [
+      { id: 'verify-1', kind: 'kane', verdict: 'failed', objectiveHash: 'locked-objective', exitCode: 1, outputTail: 'The completed state was cleared.' },
+      { id: 'agent-1', ...badInvocation },
+      { id: 'agent-2', ...badInvocation },
+    ],
+    events: [{ type: 'agent_error', at: new Date().toISOString(), message: 'Codex rejected a prompt argument.' }],
+  };
+  let repairQueued = false;
+  await page.route('**/api/session', (route) => route.fulfill(json({ mode: 'google', authenticated: true, executionEnabled: true, user: { name: 'Demo User' } })));
+  await page.route('**/api/preflight', (route) => route.fulfill(json({ hosted: true, executionEnabled: true, worker: { connected: true, busy: false, agents: [
+    { id: 'codex', name: 'Codex', supported: true, installed: true, authenticated: true, ready: true },
+  ] } })));
+  await page.route('**/api/targets', (route) => route.fulfill(json({ targets: [{ id: 'bundled-demo', name: 'Bundled Goodwork demo', ready: true }] })));
+  await page.route('**/api/runs', (route) => route.fulfill(json({ runs: [run] })));
+  await page.route('**/api/runs/codex-argument-failure/repair', async (route) => {
+    repairQueued = route.request().method() === 'POST';
+    await route.fulfill(json({ accepted: true }));
+  });
+
+  await page.goto('/');
+  const retry = page.getByRole('button', { name: 'Send to Codex' });
+  await expect(retry).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await retry.click();
+  await expect(page.getByText(/Repair queued for your local runner/)).toBeVisible();
+  expect(repairQueued).toBe(true);
+});
+
 test('keeps all primary controls keyboard reachable and usable on a narrow viewport', async ({ page }) => {
   test.setTimeout(45_000);
   await page.setViewportSize({ width: 390, height: 844 });

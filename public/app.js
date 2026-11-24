@@ -176,7 +176,12 @@ function renderRun(run) {
   const lastTwo = attempts.slice(-2);
   const repeatedFailure = lastTwo.length === 2 && lastTwo.every((attempt) => attempt.verdict === 'failed' && attempt.objectiveHash === run.objectiveHash);
   const latestAgent = [...run.attempts].reverse().find((attempt) => attempt.kind === 'agent');
-  const canRepair = ['needs_review', 'agent_error'].includes(run.state) && run.repairCount < 2 && (run.repairCount > 0 || repeatedFailure);
+  const codexArgumentFailures = run.attempts.filter((attempt) => attempt.kind === 'agent' && attempt.providerId === 'codex'
+    && attempt.exitCode === 2 && /unexpected argument/i.test(attempt.outputTail ?? '')).length;
+  const retryCodexArgumentFailure = latestAgent?.providerId === 'codex' && latestAgent.exitCode === 2
+    && /unexpected argument/i.test(latestAgent.outputTail ?? '') && codexArgumentFailures > 0 && codexArgumentFailures <= 2;
+  const canRepair = ['needs_review', 'agent_error'].includes(run.state)
+    && (run.repairCount < 2 || retryCodexArgumentFailure) && (run.repairCount > 0 || repeatedFailure);
   const canReplay = ['needs_review', 'unresolved', 'inconclusive', 'setup_error'].includes(run.state)
     || (run.state === 'agent_error' && Boolean(run.lastDiff) && latestAgent?.changed === true);
   const canPush = run.targetUrl && run.state === 'verified' && run.repairCount > 0 && Boolean(run.lastDiff) && latest?.verdict === 'passed' && latestAgent?.changed;

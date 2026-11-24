@@ -13,7 +13,7 @@
     "dev": "node --watch server.mjs",
     "test": "node --test",
     "test:e2e": "playwright test",
-    "check": "node --check server.mjs && node --check worker.mjs && node --check mcp-server.mjs && node --check lib/engine.mjs && node --check lib/store.mjs && node --check lib/process.mjs && node --check lib/agent-adapters.mjs && node --check lib/mcp-bridge.mjs && node --check lib/repeatability.mjs && node --check lib/google-auth.mjs && node --check lib/authorization.mjs && node --check lib/github-repository.mjs && node --check lib/github-repositories.mjs && node --check public/app.js && node --check demo-template/server.mjs"
+    "check": "node --check server.mjs && node --check worker.mjs && node --check mcp-server.mjs && node --check lib/engine.mjs && node --check lib/store.mjs && node --check lib/process.mjs && node --check lib/agent-adapters.mjs && node --check lib/agent-retry.mjs && node --check lib/mcp-bridge.mjs && node --check lib/repeatability.mjs && node --check lib/google-auth.mjs && node --check lib/authorization.mjs && node --check lib/github-repository.mjs && node --check lib/github-repositories.mjs && node --check public/app.js && node --check demo-template/server.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0"

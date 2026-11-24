@@ -2,7 +2,7 @@
 > patchloop@1.0.0 test:e2e
 > playwright test
 
-node.exe : [WebServer] (node:50580) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+node.exe : [WebServer] (node:40440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 At line:1 char:1
 + & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -10,26 +10,27 @@ At line:1 char:1
     + FullyQualifiedErrorId : NativeCommandError
  
 [WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-[WebServer] (node:55916) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (node:55652) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 [WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
 
-Running 14 tests using 1 worker
+Running 15 tests using 1 worker
 
-(node:53520) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:25560) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
-  ✓   1 e2e\workbench.spec.mjs:6:1 › loads the workbench and reports real local tool readiness (13.4s)
-  ✓   2 e2e\workbench.spec.mjs:20:1 › keeps hosted sign-in active, refreshes expired pairing codes, and detects a paired runner without reload (2.6s)
-  ✓   3 e2e\workbench.spec.mjs:47:1 › serves the supplied backgrounds and assigns one to each screen (4.0s)
-  ✓   4 e2e\workbench.spec.mjs:66:1 › publishes the hosted runner prerequisites and setup steps (2.7s)
-  ✓   5 e2e\workbench.spec.mjs:78:1 › loads a real bundled task prompt without creating fabricated run records (2.6s)
-  ✓   6 e2e\workbench.spec.mjs:88:1 › shows reported repository choices and submits the selected target id (2.8s)
-  ✓   7 e2e\workbench.spec.mjs:123:1 › clears the default target when a GitHub repository link is entered (2.2s)
-  ✓   8 e2e\workbench.spec.mjs:152:1 › keeps Details live while open and closes it with the visible X control (4.9s)
-  ✓   9 e2e\workbench.spec.mjs:193:1 › offers Kane verification for a saved diff after the agent exits with an error (1.9s)
-  ✓  10 e2e\workbench.spec.mjs:226:1 › keeps all primary controls keyboard reachable and usable on a narrow viewport (1.7s)
-  ✓  11 e2e\workbench.spec.mjs:240:1 › exposes health and refuses incomplete task submissions without starting tools (87ms)
-  ✓  12 e2e\workbench.spec.mjs:258:1 › publishes the bundled target and rejects an unavailable repository selection (5.7s)
-  ✓  13 e2e\workbench.spec.mjs:271:1 › adds safe response headers and blocks cross-origin state changes (27ms)
-  ✓  14 e2e\workbench.spec.mjs:281:1 › archives a completed task and restores it to Active with its checkmark (881ms)
+  ✓   1 e2e\workbench.spec.mjs:6:1 › loads the workbench and reports real local tool readiness (8.5s)
+  ✓   2 e2e\workbench.spec.mjs:20:1 › keeps hosted sign-in active, refreshes expired pairing codes, and detects a paired runner without reload (2.5s)
+  ✓   3 e2e\workbench.spec.mjs:47:1 › serves the supplied backgrounds and assigns one to each screen (2.6s)
+  ✓   4 e2e\workbench.spec.mjs:66:1 › publishes the hosted runner prerequisites and setup steps (2.2s)
+  ✓   5 e2e\workbench.spec.mjs:78:1 › loads a real bundled task prompt without creating fabricated run records (1.7s)
+  ✓   6 e2e\workbench.spec.mjs:88:1 › shows reported repository choices and submits the selected target id (2.4s)
+  ✓   7 e2e\workbench.spec.mjs:123:1 › clears the default target when a GitHub repository link is entered (1.6s)
+  ✓   8 e2e\workbench.spec.mjs:152:1 › keeps Details live while open and closes it with the visible X control (4.6s)
+  ✓   9 e2e\workbench.spec.mjs:193:1 › offers Kane verification for a saved diff after the agent exits with an error (1.1s)
+  ✓  10 e2e\workbench.spec.mjs:226:1 › allows one Codex retry after its Windows command rejects the prompt argument (871ms)
+  ✓  11 e2e\workbench.spec.mjs:260:1 › keeps all primary controls keyboard reachable and usable on a narrow viewport (1.4s)
+  ✓  12 e2e\workbench.spec.mjs:274:1 › exposes health and refuses incomplete task submissions without starting tools (110ms)
+  ✓  13 e2e\workbench.spec.mjs:292:1 › publishes the bundled target and rejects an unavailable repository selection (5.3s)
+  ✓  14 e2e\workbench.spec.mjs:305:1 › adds safe response headers and blocks cross-origin state changes (22ms)
+  ✓  15 e2e\workbench.spec.mjs:315:1 › archives a completed task and restores it to Active with its checkmark (783ms)
 
-  14 passed (49.2s)
+  15 passed (39.1s)
